@@ -90,6 +90,7 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
   const { toast, strictSecurity, muted, setMuted } = useStore();
   const [post, setPost] = useState<(Post & { content?: string; video_url?: string }) | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [playUrl, setPlayUrl] = useState("");
   const [play, setPlay] = useState(false);
   const content = post?.content || "";
   const safeHtml = useMemo(() => sanitizeHtml(content), [content, strictSecurity]);
@@ -122,11 +123,17 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
         ) : (
           <>
             <div className="relative w-full bg-black" style={{ height: "min(40vh, 360px)" }}>
-              {play && post.video_url ? (
-                <Player src={post.video_url} poster={cover(post.cover)} autoPlay active={active} controls muted={muted}
+              {play && playUrl ? (
+                <Player src={playUrl} poster={cover(post.cover)} autoPlay active={active} controls muted={muted}
                   onToggleMute={() => setMuted((m) => !m)} diagnosticContext={{ video_id: id, active }} className="w-full h-full" />
               ) : (
-                <button onClick={() => { if (post.video_url) setPlay(true); else toast("该帖子没有视频", "info"); }} className="absolute inset-0">
+                <button onClick={() => {
+                  api.play(id, 1, "post").then((info) => {
+                    if (!info?.video_url) throw new Error("暂无播放地址");
+                    setPlayUrl(info.video_url);
+                    setPlay(true);
+                  }).catch((e) => toast((e as Error).message || "该帖子没有视频", "info"));
+                }} className="absolute inset-0">
                   <Img src={post.cover} eager />
                   <span className="absolute inset-0 flex items-center justify-center">
                     <span className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center elev-2">

@@ -86,7 +86,8 @@ export const api = {
   post: (id: number) => call<Post & { content?: string; video_url?: string }>("api_post", { id }),
 
   video: (id: number) => call<Detail>("api_video", { id }),
-  play: (id: number, ep: number) => call<PlayInfo>("api_play", { id, ep }),
+  play: (id: number, ep: number, kind?: "video" | "post") =>
+    call<PlayInfo>("api_play", { id, ep, kind: kind ?? null }),
 
   comments: (id: number, ep: number, page = 1, size = 20) =>
     call<CommentPage>("api_comments", { id, ep, page, size }),

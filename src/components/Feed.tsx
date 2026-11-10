@@ -239,7 +239,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (!curId) return;
     if (playUrls[playKey]) return;
     let alive = true;
-    api.play(curId, curEp)
+    api.play(curId, curEp, kind)
       .then((info) => {
         if (!alive) return;
         if (!info?.video_url) throw new Error("暂无播放地址");
@@ -748,7 +748,12 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   <div className="rounded-xl p-5 flex flex-col items-center gap-3 text-[13px] hg-ink-2" style={{ background: "rgba(0,0,0,.7)" }}>
                     <span>视频暂时无法加载</span>
                     <span className="text-[10.5px] hg-ink-4 max-w-[240px] text-center break-all">{err}</span>
-                    <button className="hg-link text-[12.5px]" onClick={() => { setErr(""); setWaiting(true); videoRef.current?.play(); }}>重试</button>
+                    <button className="hg-link text-[12.5px]" onClick={() => {
+                      setErr("");
+                      setWaiting(true);
+                      if (playUrl) videoRef.current?.play();
+                      else setPlayUrls((m) => { const next = { ...m }; delete next[playKey]; return next; });
+                    }}>重试</button>
                   </div>
                 </div>
               )}

@@ -23,6 +23,13 @@ impl Api {
         edge(&origin, "GET", path, None, token.as_deref()).await
     }
 
+    /// 游客也可调用的 POST。有登录态就带上，没有也不拦截。
+    async fn post_optional(&self, path: &str, body: Value) -> Result<Value, String> {
+        let origin = base();
+        let token = self.session.token(&origin);
+        edge(&origin, "POST", path, Some(body), token.as_deref()).await
+    }
+
     async fn authed(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value, String> {
         let origin = base();
         let token = self
@@ -355,11 +362,70 @@ pub async fn api_video(state: State<'_, Api>, id: i64) -> Result<Value, String> 
     state.get(&format!("/api/videos/{id}")).await
 }
 
+/// 把新播放接口收成播放器一直用的 `{ video_url, video_url_hevc }`。
+/// 短剧地址在 `streams.main` / `streams.hevc`；吃瓜帖子在 `videos[].url`。
+pub(crate) fn play_info_from_playback(data: Value, id: i64, ep: u32) -> Result<Value, String> {
+    let url = data
+        .pointer("/streams/main")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            data.get("videos")
+                .and_then(|v| v.as_array())
+                .and_then(|items| {
+                    items.iter().find_map(|item| {
+                        item.get("url")
+                            .and_then(|u| u.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string)
+                    })
+                })
+        })
+        .filter(|s| s.starts_with("https://"))
+        .ok_or_else(|| "暂无播放地址".to_string())?;
+    let hevc = data
+        .pointer("/streams/hevc")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty() && s.starts_with("https://"))
+        .unwrap_or("");
+    let ep_num = data.get("ep").and_then(|v| v.as_u64()).unwrap_or(ep as u64);
+    let duration = data
+        .get("duration")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let title = data.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    Ok(json!({
+        "id": id,
+        "ep_num": ep_num,
+        "duration": duration,
+        "title": title,
+        "video_url": url,
+        "video_url_hevc": hevc,
+    }))
+}
+
 #[tauri::command]
-pub async fn api_play(state: State<'_, Api>, id: i64, ep: u32) -> Result<Value, String> {
-    state
-        .get(&format!("/api/videos/{id}/play?ep={ep}&page_texts=0"))
-        .await
+pub async fn api_play(
+    state: State<'_, Api>,
+    id: i64,
+    ep: u32,
+    kind: Option<String>,
+) -> Result<Value, String> {
+    if id <= 0 {
+        return Err("无效的媒体编号".into());
+    }
+    // 官网 2026-11-09 起，GET /play 仍返回 200，但 video_url 为空。
+    // 真实地址改由 POST /playback 下发。
+    let path = if kind.as_deref() == Some("post") {
+        format!("/api/posts/{id}/playback")
+    } else if ep > 0 {
+        format!("/api/videos/{id}/episodes/{ep}/playback")
+    } else {
+        format!("/api/videos/{id}/playback")
+    };
+    let data = state.post_optional(&path, json!({})).await?;
+    play_info_from_playback(data, id, ep)
 }
 
 /* ───────────────────────── 评论 / 互动 ───────────────────────── */
@@ -461,8 +527,40 @@ pub async fn api_post_comments(
 }
 #[cfg(test)]
 mod tests {
-    use super::is_newer;
-    use serde_json::Value;
+    use super::{is_newer, play_info_from_playback};
+    use serde_json::{json, Value};
+
+    #[test]
+    fn playback_payload_maps_streams_and_post_videos() {
+        let drama = play_info_from_playback(
+            json!({
+                "ep": 3,
+                "streams": { "main": "https://cdn.example/a.m3u8", "hevc": "https://cdn.example/h.m3u8" }
+            }),
+            117,
+            3,
+        )
+        .unwrap();
+        assert_eq!(drama["video_url"], "https://cdn.example/a.m3u8");
+        assert_eq!(drama["video_url_hevc"], "https://cdn.example/h.m3u8");
+        assert_eq!(drama["ep_num"], 3);
+
+        let post = play_info_from_playback(
+            json!({ "videos": [{ "index": 0, "url": "https://cdn.example/post.m3u8" }] }),
+            65,
+            1,
+        )
+        .unwrap();
+        assert_eq!(post["video_url"], "https://cdn.example/post.m3u8");
+
+        assert!(play_info_from_playback(json!({ "streams": { "main": "" } }), 1, 1).is_err());
+        assert!(play_info_from_playback(
+            json!({ "streams": { "main": "http://cdn.example/a.m3u8" } }),
+            1,
+            1,
+        )
+        .is_err());
+    }
 
     #[test]
     fn frontend_cannot_bypass_url_policy_with_opener_commands() {
