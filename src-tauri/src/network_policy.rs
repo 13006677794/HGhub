@@ -113,6 +113,17 @@ pub fn allowed_ip(ip: IpAddr) -> bool {
                 return allowed_ip(IpAddr::V4(v4));
             }
             let s = ip.segments();
+            // IPv4 转换地址 ::ffff:0:a.b.c.d（RFC 2765）：部分 TUN/FakeIP 代理的 AAAA 应答用这种写法，
+            // 按内嵌 IPv4 判断，否则 FakeIP 的 v6 答案会被当成保留地址把整次解析拒掉。
+            if s[..4] == [0, 0, 0, 0] && s[4] == 0xffff && s[5] == 0 {
+                let v4 = std::net::Ipv4Addr::new(
+                    (s[6] >> 8) as u8,
+                    s[6] as u8,
+                    (s[7] >> 8) as u8,
+                    s[7] as u8,
+                );
+                return allowed_ip(IpAddr::V4(v4));
+            }
             // 仅全球单播；拒绝 ULA、链路本地、回环、组播、NAT64，以及可封装私网 IPv4 的 6to4/Teredo。
             (s[0] & 0xe000) == 0x2000
                 && s[0] != 0x2002
@@ -280,6 +291,8 @@ mod tests {
             "198.19.255.255",
             "2606:4700:4700::1111",
             "::ffff:198.18.0.1",
+            "::ffff:0:c612:56",
+            "::ffff:0:8.8.8.8",
         ] {
             assert!(allowed_ip(ip.parse().unwrap()), "{ip}");
         }
@@ -310,6 +323,8 @@ mod tests {
             "ff02::1",
             "::ffff:127.0.0.1",
             "::ffff:192.168.1.1",
+            "::ffff:0:127.0.0.1",
+            "::ffff:0:192.168.1.1",
             "64:ff9b::c0a8:101",
             "2002:c0a8:101::1",
             "2001::1",
