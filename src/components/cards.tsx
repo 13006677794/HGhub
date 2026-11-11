@@ -49,17 +49,17 @@ export function Masonry({ videos, onOpen, wide = false, gap = "gap-1" }: {
 /* ——— 分类横向卡片 ——— */
 export function RowCard({ v, onOpen }: { v: VideoCard; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} className="w-[104px] shrink-0 text-left snap-start pressable group">
-      <div className="relative w-full rounded-(--r-sm) overflow-hidden bg-s1 elev-1" style={{ paddingTop: "133%" }}>
+    <button onClick={onOpen} className="w-[112px] shrink-0 text-left snap-start pressable group">
+      <div className="relative w-full rounded-[10px] overflow-hidden bg-s1" style={{ paddingTop: "134%" }}>
         <Img src={v.cover} />
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/75 to-transparent" />
-        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[8.5px] font-bold brand-grad">
-          {v.is_finished ? "完结" : `${v.episode_count}集`}
+        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold hg-chip-strong tabular-nums">
+          {v.is_finished ? "完结" : `${v.episode_count} 集`}
         </span>
-        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 text-[9px] font-semibold text-white/90 tsh"><IPlayF size={9} />{fmt(v.hot)}</span>
+        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 text-[11px] font-semibold text-white/90 tsh tabular-nums"><IPlayF size={9} />{fmt(v.hot)}</span>
       </div>
-      <div className="mt-1.5 text-[11.5px] font-medium text-on clamp-1 leading-tight">{v.title}</div>
-      <div className="text-[10px] text-mut clamp-1 mt-0.5">{v.tags?.slice(0, 2).join(" · ")}</div>
+      <div className="mt-1.5 text-[14px] font-medium text-on clamp-1 leading-tight">{v.title}</div>
+      <div className="text-[12px] text-dim clamp-1 mt-0.5">{v.tags?.slice(0, 2).join(" · ")}</div>
     </button>
   );
 }

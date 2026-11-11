@@ -58,41 +58,49 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
     void loadPreview("posts");
   }, [active, loadPreview]);
 
+  /* 排行榜入口右侧的三张小封面：取第一个已加载频道的前三部 */
+  const fan = (CHANNELS.map(c => rows[c.cate] || []).find(l => l.length >= 3) || []).slice(0, 3).map(v => v.cover);
+
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
       <div className="shrink-0 px-4 pb-1" style={{ paddingTop: "calc(var(--sat, 0px) + 14px)" }}>
         <div className="flex items-end gap-2.5">
-          <span className="text-[24px] font-bold text-on leading-none">分类</span>
-          <span className="text-[11px] text-mut pb-0.5">{CHANNELS.length + 1} 个频道 · 每周持续上新</span>
+          <h1 className="text-[24px] font-bold text-on leading-none">分类</h1>
+          <span className="text-[13px] text-dim">{CHANNELS.length + 1} 个频道 · 每周上新</span>
         </div>
       </div>
 
       <div className="flex-1 scroll-y pb-24 pt-2">
-        {/* 排行榜入口 */}
+        {/* 排行榜入口：右侧叠三张已加载的封面 */}
         <button onClick={() => push({ kind: "ranks" })}
-          className="mx-4 mb-5 w-[calc(100%-2rem)] flex items-center gap-3 rounded-(--r-md) bg-s2 p-3.5 text-left pressable elev-1">
-          <span className="w-10 h-10 rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center shrink-0"><ITrophy size={20} /></span>
-          <span className="flex-1">
-            <span className="block text-[14.5px] font-semibold text-on">排行榜</span>
-            <span className="block text-[10.5px] text-mut mt-0.5">热播榜 · 推荐榜 · 潜力榜</span>
+          className="mx-4 mb-7 w-[calc(100%-2rem)] h-[76px] flex items-center gap-3.5 rounded-(--r-lg) bg-s1 px-3.5 text-left pressable">
+          <span className="w-10 h-10 rounded-(--r-md) flex items-center justify-center shrink-0 text-primary" style={{ background: "var(--p-tint)" }}><ITrophy size={21} /></span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[16px] font-bold text-on">排行榜</span>
+            <span className="block text-[13px] text-dim mt-0.5">热播 · 推荐 · 潜力</span>
           </span>
-          <IChevR size={16} className="text-mut" />
+          {fan.length === 3 && (
+            <span className="relative w-[74px] h-[52px] shrink-0" aria-hidden>
+              {fan.map((src, i) => (
+                <span key={src + i} className="absolute w-[34px] h-[46px] rounded-md overflow-hidden bg-s3"
+                  style={{ left: i * 18, top: i === 1 ? 0 : 6, transform: `rotate(${(i - 1) * 8}deg)`, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+                  <Img src={src} />
+                </span>
+              ))}
+            </span>
+          )}
+          <IChevR size={16} className="text-dim shrink-0" />
         </button>
 
         {CHANNELS.map((c, ci) => {
           const list = rows[c.cate] || [];
           return (
-            <section key={c.cate} aria-label={c.name} className="mb-5 a-rise" style={{ animationDelay: `${Math.min(ci * 50, 300)}ms` }}>
+            <section key={c.cate} aria-label={c.name} className="mb-7 a-rise" style={{ animationDelay: `${Math.min(ci * 50, 300)}ms` }}>
               <button onClick={() => push({ kind: "channel", cate: c.cate, name: c.name })}
-                className="w-full flex items-center gap-2.5 px-4 mb-2.5 text-left pressable group">
-                <span className="w-[36px] h-[36px] rounded-(--r-sm) tonal flex items-center justify-center shrink-0 text-primary">
-                  <IGrid size={19} strokeWidth={1.9} />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-[15.5px] font-semibold text-on leading-tight">{c.name}</span>
-                  <span className="block text-[10.5px] text-mut mt-0.5 truncate">{c.desc}</span>
-                </span>
-                <span className="flex items-center gap-0.5 text-[11.5px] text-mut group-hover:text-primary transition-colors">
+                className="w-full min-h-11 flex items-baseline gap-2 px-4 mb-2 text-left pressable">
+                <span className="font-serif text-[20px] font-bold text-on tracking-wide shrink-0">{c.name}</span>
+                <span className="flex-1 min-w-0 text-[13px] text-dim truncate">{c.desc}</span>
+                <span className="flex items-center gap-0.5 text-[14px] text-mut shrink-0 self-center">
                   全部<IChevR size={14} />
                 </span>
               </button>
@@ -107,37 +115,32 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
         })}
 
         {/* 吃瓜 */}
-        <section aria-label="黄果吃瓜" className="mb-5 a-rise">
+        <section aria-label="黄果吃瓜" className="mb-7 a-rise">
           <button onClick={() => push({ kind: "posts" })}
-            className="w-full flex items-center gap-2.5 px-4 mb-2.5 text-left pressable group">
-            <span className="w-[36px] h-[36px] rounded-(--r-sm) tonal flex items-center justify-center shrink-0 text-primary">
-              <IGrid size={19} strokeWidth={1.9} />
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[15.5px] font-semibold text-on leading-tight">黄果吃瓜</span>
-              <span className="block text-[10.5px] text-mut mt-0.5 truncate">圈内爆料 · 每日更新</span>
-            </span>
-            <span className="flex items-center gap-0.5 text-[11.5px] text-mut group-hover:text-primary transition-colors">
+            className="w-full min-h-11 flex items-baseline gap-2 px-4 mb-2 text-left pressable">
+            <span className="font-serif text-[20px] font-bold text-on tracking-wide shrink-0">黄果吃瓜</span>
+            <span className="flex-1 min-w-0 text-[13px] text-dim truncate">圈内爆料 · 每日更新</span>
+            <span className="flex items-center gap-0.5 text-[14px] text-mut shrink-0 self-center">
               全部<IChevR size={14} />
             </span>
           </button>
           <div className="scroll-x flex gap-2.5 px-4 snap-x">
             {posts.map((post) => (
               <button key={post.id} onClick={() => push({ kind: "post", id: post.id })}
-                className="w-[104px] shrink-0 text-left snap-start pressable">
-                <div className="relative w-full rounded-(--r-sm) overflow-hidden bg-s1 elev-1" style={{ paddingTop: "133%" }}>
+                className="w-[112px] shrink-0 text-left snap-start pressable">
+                <div className="relative w-full rounded-[10px] overflow-hidden bg-s1" style={{ paddingTop: "134%" }}>
                   <Img src={post.cover} />
                   <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/75 to-transparent" />
-                  <span className="absolute bottom-1.5 right-1.5 text-[9px] font-semibold text-white/90 tsh">{fmt(post.hot)}</span>
+                  <span className="absolute bottom-1.5 right-1.5 text-[11px] font-semibold text-white/90 tsh tabular-nums">{fmt(post.hot)}</span>
                 </div>
-                <div className="mt-1.5 text-[11.5px] font-medium text-on clamp-1 leading-tight">{post.title}</div>
+                <div className="mt-1.5 text-[14px] font-medium text-on clamp-1 leading-tight">{post.title}</div>
               </button>
             ))}
             {!posts.length && <PreviewStatus name="黄果吃瓜" loading={loading.posts !== false} error={errors.posts} onRetry={() => void loadPreview("posts")} />}
           </div>
         </section>
 
-        <div className="px-4 text-center text-[10.5px] text-dim pt-1">— 已展示全部频道 —</div>
+        <div className="px-4 text-center text-[12px] text-dim pt-1">— 已展示全部频道 —</div>
       </div>
       {wide && <div />}
     </div>
@@ -145,9 +148,9 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
 }
 
 function PreviewStatus({ name, loading, error, onRetry }: { name: string; loading: boolean; error?: string; onRetry: () => void }) {
-  return <div className="h-[150px] flex flex-col justify-center items-start gap-2 text-[11.5px] text-dim px-1">
+  return <div className="h-[150px] flex flex-col justify-center items-start gap-2 text-[13px] text-dim px-1">
     <span>{loading ? "加载中…" : error || "暂无内容"}</span>
-    {!loading && error && <button aria-label={`重试${name}`} onClick={onRetry} className="text-primary pressable">重试</button>}
+    {!loading && error && <button aria-label={`重试${name}`} onClick={onRetry} className="h-9 px-3 -ml-3 text-primary font-medium pressable">重试</button>}
   </div>;
 }
 
@@ -209,14 +212,15 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
           <span className="w-[40px] h-[40px] rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center"><IGrid size={21} strokeWidth={1.9} /></span>
           <div className="flex-1 min-w-0">
             <div className="text-[17px] font-bold text-on leading-tight">{name}</div>
-            <div className="text-[10.5px] text-mut">共 {items.length} 部 · 已加载 {page}/{Math.max(pages, 1)} 页</div>
+            <div className="text-[12px] text-dim">共 {items.length} 部 · 已加载 {page}/{Math.max(pages, 1)} 页</div>
           </div>
         </div>
         <div className="px-4 pb-3 flex gap-2">
           {(["最新", "最热", "高分"] as const).map((s) => (
             <button key={s} onClick={() => setSort(s)}
-              className={`px-4 h-8 rounded-(--r-ctl) text-[12px] font-semibold pressable ${sort === s ? "tonal text-on-sec" : "bg-s3 text-mut"}`}
-              style={sort === s ? { background: "var(--p-sec)", color: "var(--p-primary)" } : undefined}>{s}</button>
+              aria-pressed={sort === s}
+              className={`px-4 h-9 rounded-(--r-ctl) text-[14px] pressable ${sort === s ? "font-semibold" : "bg-s3 text-mut font-medium"}`}
+              style={sort === s ? { background: "var(--p-on)", color: "var(--p-bg)" } : undefined}>{s}</button>
           ))}
         </div>
       </div>
@@ -231,7 +235,7 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
         <div ref={sentinel} className="h-10" />
         {loading && <div className="flex justify-center py-3"><div className="w-6 h-6 spinner" /></div>}
         {!loading && page >= pages && sorted.length > 0 && (
-          <div className="text-center text-[10.5px] text-dim py-3">— 已经到底啦 —</div>
+          <div className="text-center text-[12px] text-dim py-3">— 已经到底啦 —</div>
         )}
       </div>
     </div>
