@@ -1,33 +1,37 @@
 @import "tailwindcss";
 
 /* ===================================================================
-   与设计稿一致的 Fluent 色板：深色默认，浅色 html.theme-light
+   色板：深色默认（近黑底 + 银白渐变强调色），浅色 html.theme-light
+   （浅色沿用原有表面色，只把强调色换成石墨渐变）。
+   --p-primary 是强调色的纯色版本（文字 / 图标 / 描边用）；
+   --p-accent-grad 是渐变版本，只用于填充面（.bg-primary / .brand-grad）。
    =================================================================== */
 :root {
   color-scheme: dark;
-  --p-canvas: #1a1a1a;
-  --p-bg: #202020;
-  --p-s1: #272727;
-  --p-s2: #2c2c2c;
-  --p-s3: #343434;
-  --p-s4: #3e3e3e;
-  --p-on: #ffffff;
-  --p-mut: #c5c5c5;
-  --p-dim: #8b8b8b;
-  --p-primary: #60cdff;
-  --p-on-primary: #003042;
-  --p-pc: #1f5a78;
-  --p-on-pc: #cdefff;
-  --p-sec: #383838;
-  --p-on-sec: #ffffff;
+  --p-canvas: #050506;
+  --p-bg: #0b0b0d;
+  --p-s1: #151518;
+  --p-s2: #1d1d21;
+  --p-s3: #26262b;
+  --p-s4: #33333a;
+  --p-on: #f4f1ec;
+  --p-mut: #a9a7a3;
+  --p-dim: #7a7976;
+  --p-primary: #e6e9ee;
+  --p-on-primary: #0b0b0d;
+  --p-accent-grad: linear-gradient(135deg, #ffffff 0%, #d9dde3 45%, #9aa3ae 100%);
+  --p-pc: #2a2c31;
+  --p-on-pc: #e6e9ee;
+  --p-sec: #26262b;
+  --p-on-sec: #f4f1ec;
   --p-like: #ff6f8c;
   --p-star: #e8c250;
   --p-success: #6ccb5f;
   --p-danger: #ff99a4;
   --p-on-danger: #45060f;
-  --p-glow: rgba(96, 205, 255, .28);
+  --p-glow: rgba(255, 255, 255, .18);
   --p-hover: rgba(255, 255, 255, .08);
-  --p-tint: rgba(96, 205, 255, .14);
+  --p-tint: rgba(255, 255, 255, .10);
   --p-shadow: 0 28px 88px rgba(0, 0, 0, .45), 0 6px 20px rgba(0, 0, 0, .32);
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-ctl: 999px;
   --nav-h: 64px;
@@ -45,10 +49,11 @@ html.theme-light {
   --p-on: #1a1a1a;
   --p-mut: #5c5c5c;
   --p-dim: #8a8a8a;
-  --p-primary: #0067c0;
+  --p-primary: #1f2328;
   --p-on-primary: #ffffff;
-  --p-pc: #cce4f7;
-  --p-on-pc: #003a66;
+  --p-accent-grad: linear-gradient(135deg, #3a3f47 0%, #121417 100%);
+  --p-pc: #e4e6ea;
+  --p-on-pc: #1a1a1a;
   --p-sec: #e5e5e5;
   --p-on-sec: #1a1a1a;
   --p-like: #e74856;
@@ -56,14 +61,16 @@ html.theme-light {
   --p-success: #0f7b0f;
   --p-danger: #c42b1c;
   --p-on-danger: #ffffff;
-  --p-glow: rgba(0, 103, 192, .2);
+  --p-glow: rgba(0, 0, 0, .16);
   --p-hover: rgba(0, 0, 0, .05);
-  --p-tint: rgba(0, 103, 192, .12);
+  --p-tint: rgba(0, 0, 0, .07);
   --p-shadow: 0 18px 48px rgba(0, 0, 0, .14), 0 2px 8px rgba(0, 0, 0, .06);
 }
 
 @theme inline {
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Roboto", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+  /* 标题用宋体：只走系统自带字体（iOS/macOS 宋体-简、Android Noto Serif CJK、Windows 中易宋体），不打包字体文件 */
+  --font-serif: "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", serif;
   --color-canvas: var(--p-canvas);
   --color-bg: var(--p-bg);
   --color-s1: var(--p-s1);
@@ -131,7 +138,9 @@ html.theme-light .elev-3 { box-shadow: 0 10px 30px rgba(0,0,0,.1); }
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
-.brand-grad { background: var(--p-primary); color: var(--p-on-primary); }
+.brand-grad { background: var(--p-accent-grad); color: var(--p-on-primary); }
+/* 实心强调色填充统一叠一层渐变（bg-primary/20 这类带透明度的写法不受影响） */
+.bg-primary { background-image: var(--p-accent-grad); }
 .brand-text { color: var(--p-primary); }
 .tonal { background: var(--p-sec); color: var(--p-on-sec); }
 
@@ -441,7 +450,7 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
   background: rgba(255,255,255,.16); border-radius: 2px; overflow: hidden; transition: height .16s;
 }
 .desktop-seek-buffer { position: absolute; height: 100%; background: rgba(255,255,255,.10); }
-.desktop-seek-played { position: absolute; height: 100%; background: #80bbdf; border-radius: inherit; }
+.desktop-seek-played { position: absolute; height: 100%; background: #d9dde3; border-radius: inherit; }
 .desktop-seek:hover .desktop-seek-track, .desktop-seek:focus-within .desktop-seek-track { height: 4px; }
 .desktop-seek > input {
   -webkit-appearance: none; appearance: none; position: absolute; inset: 0;
@@ -524,7 +533,7 @@ html.theme-light .article-body { color: rgba(20,24,30,.82); }
 .hg-ink-3 { color: rgba(255, 255, 255, .78); }
 .hg-ink-4 { color: rgba(255, 255, 255, .6); }
 .hg-gold  { color: #f3c969; }
-.hg-link  { color: #8fd0ff; }
+.hg-link  { color: #dfe4ea; }
 .hg-chip         { background: rgba(0, 0, 0, .45); color: #fff; }
 .hg-chip-strong  { background: rgba(0, 0, 0, .62); color: #fff; }
 .hg-chip:active  { background: rgba(0, 0, 0, .62); }
