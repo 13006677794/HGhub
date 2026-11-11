@@ -74,15 +74,15 @@ export function RankRow({ item, onOpen, metricMax }: {
     <button onClick={onOpen}
       className={`w-full flex items-center gap-3 p-2.5 rounded-(--r-md) text-left mb-2 pressable a-rise ${i < 3 ? "bg-s3" : "bg-s2"}`}
       style={{ animationDelay: `${Math.min(i * 35, 300)}ms` }}>
-      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0 tabular-nums ${i === 0 ? "bg-primary text-on-primary" : i < 3 ? "tonal" : "text-dim"}`}>{item.rank}</span>
+      <span className={`w-7 h-7 rounded-full flex items-center justify-center font-serif text-[15px] font-bold shrink-0 tabular-nums ${i === 0 ? "bg-primary text-on-primary" : i < 3 ? "tonal" : "text-dim"}`}>{item.rank}</span>
       <div className="relative w-[52px] h-[68px] rounded-lg overflow-hidden bg-s3 shrink-0">
         <Img src={item.cover} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[12.5px] font-medium text-on clamp-2 leading-snug">{item.title}</div>
+        <div className="text-[14px] font-medium text-on clamp-2 leading-snug">{item.title}</div>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[10px] text-mut truncate">{item.tags?.slice(0, 2).join(" · ")}</span>
-          <span className="flex items-center gap-0.5 text-[10px] font-bold text-primary">{fmt(item.metric_value)}</span>
+          <span className="text-[12px] text-dim truncate">{item.tags?.slice(0, 2).join(" · ")}</span>
+          <span className="flex items-center gap-0.5 text-[12px] font-bold text-primary tabular-nums">{fmt(item.metric_value)}</span>
         </div>
         <div className="mt-1.5 h-[3px] rounded-full bg-s4 overflow-hidden">
           <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(6, Math.round((item.metric_value / Math.max(1, metricMax)) * 100))}%` }} />

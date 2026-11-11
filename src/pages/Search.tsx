@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { api, fmt } from "../api";
+import { api, fmt, isIos, isMobile } from "../api";
 import type { RankItem, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Masonry, RankRow } from "../components/cards";
-import { Empty } from "../components/ui";
-import { IBack, IClose, IFireF, IRefresh, ISearch, ITrophy } from "../icons";
+import { Empty, Img } from "../components/ui";
+import { IBack, IChevR, IClose, IFireF, ISearch, ITrophy } from "../icons";
 
 const HOT_TAGS = ["都市", "逆袭", "古风", "系统", "后宫", "校园", "仙侠", "职场", "大男主", "御姐", "脑洞", "奇幻"];
 
@@ -20,9 +20,20 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
   const inputRef = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
 
+  /* 只在桌面端自动聚焦。手机端自动聚焦会弹出键盘，接下来的第一次点击只是收起键盘、点不到内容。 */
   useEffect(() => {
-    if (active && !/Android/i.test(navigator.userAgent)) inputRef.current?.focus();
+    if (active && !isMobile) inputRef.current?.focus();
   }, [active]);
+
+  /* 热播榜预览：第一次打开搜索页时才加载 */
+  const [hot, setHot] = useState<RankItem[]>([]);
+  const hotStarted = useRef(false);
+  useEffect(() => {
+    if (!active || hotStarted.current) return;
+    hotStarted.current = true;
+    api.rank("hot").then((res) => setHot((res?.items || []).slice(0, 5))).catch(() => { hotStarted.current = false; });
+  }, [active]);
+  const openHot = (it: RankItem) => push({ kind: "feed", videoIds: hot.map((x) => x.video_id), index: hot.findIndex((x) => x.video_id === it.video_id), title: "热播榜" });
 
   const run = async (keyword: string, p: number) => {
     if (busy.current) return;
@@ -61,71 +72,99 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
-      {/* 搜索栏 */}
-      <div className="shrink-0 px-4 pb-3 flex items-center gap-2.5" style={{ paddingTop: "calc(var(--sat, 0px) + 12px)" }}>
-        <form className="flex-1 flex items-center gap-2 h-11 rounded-(--r-ctl) bg-s3 px-3.5 focus-within:bg-s4 transition-colors"
-          onSubmit={(e) => { e.preventDefault(); submit(q); }}>
-          <ISearch size={17} className="text-mut shrink-0" />
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索短剧、作者、题材…"
-            className="flex-1 min-w-0 bg-transparent text-[13.5px] text-on placeholder-dim outline-none" />
-          {q && <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
+      {/* 搜索栏：iOS 40 高圆角矩形，Android 56 高胶囊 */}
+      <div className="shrink-0 px-4 pb-2 flex items-center gap-1.5" style={{ paddingTop: "calc(var(--sat, 0px) + 10px)" }}>
+        <form className={`flex-1 flex items-center bg-s2 focus-within:bg-s3 transition-colors ${isIos ? "h-10 gap-2 px-3 rounded-[12px]" : "h-14 gap-3 px-[18px] rounded-full"}`}
+          onSubmit={(e) => { e.preventDefault(); submit(q); inputRef.current?.blur(); }}>
+          <ISearch size={isIos ? 18 : 21} className="text-dim shrink-0" />
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索剧名、题材" aria-label="搜索短剧"
+            enterKeyHint="search"
+            className="flex-1 min-w-0 bg-transparent text-[16px] text-on placeholder-dim outline-none" />
+          {q && <button type="button" aria-label="清空输入" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }} className="w-7 h-7 -mr-1 rounded-full flex items-center justify-center text-mut pressable"><span className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center"><IClose size={11} /></span></button>}
         </form>
         <button onClick={() => push({ kind: "ranks" })} aria-label="排行榜"
-          className="w-11 h-11 rounded-(--r-sm) flex items-center justify-center bg-primary text-on-primary pressable elev-2">
-          <ITrophy size={19} />
+          className="w-11 h-11 rounded-full flex items-center justify-center text-on pressable">
+          <ITrophy size={22} />
         </button>
       </div>
 
-      <div className="flex-1 scroll-y px-4 pb-24">
+      <div className="flex-1 scroll-y pb-24">
         {!querying ? (
           <>
             {searchHist.length > 0 && (
-              <div className="mt-1 a-rise">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-on">搜索历史</span>
-                  <button onClick={clearSearchHist} className="text-[11px] text-dim pressable">清空</button>
+              <section className="pt-4 a-rise">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <h2 className="text-[17px] font-bold text-on">最近搜索</h2>
+                  <button onClick={clearSearchHist} className="h-9 pl-3 text-[13px] text-dim pressable">清空</button>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-2.5">
+                <div className="flex flex-wrap gap-2 px-4">
                   {searchHist.map((h) => (
-                    <button key={h} onClick={() => { setQ(h); submit(h); }} className="px-3.5 h-8 rounded-(--r-ctl) bg-s3 text-[12px] text-on/80 pressable">{h}</button>
+                    <button key={h} onClick={() => { setQ(h); submit(h); }}
+                      className={`px-3.5 h-8 bg-s2 text-[14px] text-mut pressable ${isIos ? "rounded-full" : "rounded-lg"}`}>{h}</button>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
-            <div className="mt-5 rounded-(--r-md) bg-s2 p-3.5 a-rise">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[13px] font-semibold text-on/90"><IFireF size={15} className="text-primary" />热门题材</span>
-                <button onClick={() => push({ kind: "ranks" })} className="text-[11px] text-primary font-semibold pressable">完整榜单 ›</button>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3">
+            <section className="pt-7 a-rise">
+              <h2 className="px-4 mb-3 text-[17px] font-bold text-on">按题材找</h2>
+              <div className="grid grid-cols-4 gap-2 px-4">
                 {HOT_TAGS.map((t) => (
                   <button key={t} onClick={() => { setQ(t); submit(t); }}
-                    className="px-3 h-7 rounded-(--r-ctl) bg-s3 text-[12px] text-on/85 pressable">{t}</button>
+                    className="h-12 rounded-(--r-md) bg-s1 font-serif text-[16px] font-bold text-on tracking-wide pressable">{t}</button>
                 ))}
               </div>
-            </div>
+            </section>
 
-            <div className="flex items-center justify-between mt-6 mb-2.5">
-              <span className="text-[13px] font-bold text-on">为你推荐</span>
-              <button onClick={() => submit(HOT_TAGS[Math.floor(Math.random() * HOT_TAGS.length)])}
-                className="flex items-center gap-1 text-[11.5px] text-mut pressable"><IRefresh size={13} />换一批</button>
-            </div>
-            <p className="text-[11.5px] text-dim leading-relaxed">
-              输入关键词后按回车搜索，也可以点上面的题材直接看片单。
-            </p>
+            {hot.length > 0 && (
+              <section className="pt-7 a-rise">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <h2 className="text-[17px] font-bold text-on">热播榜</h2>
+                  <button onClick={() => push({ kind: "ranks" })} className="h-9 pl-3 flex items-center gap-0.5 text-[14px] text-mut pressable">完整榜单<IChevR size={14} /></button>
+                </div>
+                {/* 第 1 名：大卡片 */}
+                <button onClick={() => openHot(hot[0])}
+                  className="mx-4 w-[calc(100%-2rem)] p-3 rounded-(--r-lg) bg-s1 flex gap-3.5 text-left pressable">
+                  <span className="relative w-[84px] h-[112px] rounded-[10px] overflow-hidden bg-s3 shrink-0">
+                    <Img src={hot[0].cover} />
+                    <span className="absolute left-0 top-0 px-2 py-0.5 rounded-br-[10px] brand-grad font-serif text-[15px] font-bold">1</span>
+                  </span>
+                  <span className="flex-1 min-w-0 flex flex-col gap-1.5 pt-0.5">
+                    <span className="font-serif text-[19px] font-bold text-on leading-snug tracking-wide clamp-2">{hot[0].title}</span>
+                    <span className="text-[13px] text-dim truncate">{hot[0].tags?.slice(0, 3).join(" · ")}</span>
+                    <span className="mt-auto flex items-center gap-1 text-[12px] font-semibold text-primary tabular-nums"><IFireF size={13} />热度 {fmt(hot[0].metric_value)}</span>
+                  </span>
+                </button>
+                {/* 第 2–5 名：紧凑列表 */}
+                <div className="pt-1.5">
+                  {hot.slice(1).map((it) => (
+                    <button key={it.video_id} onClick={() => openHot(it)}
+                      className="w-full h-[68px] px-4 flex items-center gap-3.5 text-left pressable">
+                      <span className={`w-5 text-center font-serif text-[20px] font-bold tabular-nums ${it.rank <= 3 ? "text-on" : "text-dim"}`}>{it.rank}</span>
+                      <span className="relative w-10 h-[54px] rounded-md overflow-hidden bg-s3 shrink-0"><Img src={it.cover} /></span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[15px] font-medium text-on truncate">{it.title}</span>
+                        <span className="block text-[12px] text-dim truncate mt-0.5">{it.tags?.slice(0, 2).join(" · ")}</span>
+                      </span>
+                      <span className="text-[12px] text-dim tabular-nums shrink-0">{fmt(it.metric_value)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
           </>
         ) : (
           <>
-            <div className="text-[11.5px] text-mut mt-1 mb-2.5">「{submitted}」共 <span className="text-primary font-bold">{items.length}</span> 条结果</div>
+            <div className="px-4">
+            <div className="text-[13px] text-mut mt-2 mb-3">「{submitted}」共 <span className="text-on font-bold tabular-nums">{items.length}</span> 条结果</div>
             {items.length ? (
               <>
                 <Masonry videos={items} wide={wide} onOpen={(v) => push({ kind: "feed", videoIds: items.map((x) => x.id), index: items.findIndex((x) => x.id === v.id), title: `搜索 · ${submitted}` })} />
                 <div className="flex justify-center py-4">
                   {loading ? <div className="w-6 h-6 spinner" />
                     : page < pages ? (
-                      <button onClick={() => run(submitted, page + 1)} className="px-5 h-9 rounded-(--r-ctl) bg-s3 text-[12px] text-on/85 pressable">加载更多</button>
-                    ) : <span className="text-[10.5px] text-dim">— 已经到底啦 —</span>}
+                      <button onClick={() => run(submitted, page + 1)} className="px-5 h-11 rounded-(--r-ctl) bg-s3 text-[14px] text-on/85 pressable">加载更多</button>
+                    ) : <span className="text-[12px] text-dim">— 已经到底啦 —</span>}
                 </div>
               </>
             ) : loading ? (
@@ -134,6 +173,7 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
               <Empty icon={<ISearch size={26} />} title={err || "没有找到相关内容"} sub="换个关键词试试，比如「都市」「逆袭」"
                 action="看看热榜" onAction={() => push({ kind: "ranks" })} />
             )}
+            </div>
           </>
         )}
       </div>
@@ -177,15 +217,16 @@ export function RankPage({ onBack, wide }: { onBack: () => void; wide: boolean }
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-9 h-9 rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center"><ITrophy size={20} /></span>
-                <span className="text-[24px] font-bold tracking-wide text-on">HG 热榜</span>
+                <span className="font-serif text-[24px] font-bold tracking-wide text-on">HG 热榜</span>
               </div>
-              <div className="text-[11px] text-mut mt-1">{meta.desc} · 每 10 分钟更新</div>
+              <div className="text-[13px] text-dim mt-1">{meta.desc} · 每 10 分钟更新</div>
             </div>
           </div>
           <div className="flex bg-s3 rounded-(--r-ctl) p-1 mt-3">
             {RANK_TABS.map((t) => (
-              <button key={t.k} onClick={() => setTab(t.k)}
-                className={`flex-1 h-8 rounded-(--r-ctl) text-[12px] font-semibold transition-all ${tab === t.k ? "tonal elev-1" : "text-mut"}`}>{t.label}</button>
+              <button key={t.k} onClick={() => setTab(t.k)} aria-pressed={tab === t.k}
+                className={`flex-1 h-9 rounded-(--r-ctl) text-[14px] font-semibold transition-all ${tab === t.k ? "" : "text-mut"}`}
+                style={tab === t.k ? { background: "var(--p-on)", color: "var(--p-bg)" } : undefined}>{t.label}</button>
             ))}
           </div>
         </div>
