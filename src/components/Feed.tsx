@@ -597,23 +597,23 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               {/* 右侧操作栏（移动端）：收藏 / 评论 / 全屏 / 分享
                   颜色写死不跟主题走：浅色主题下这些字必须仍是白色 */}
               {!fs && !isDesktop && (
-                <div className="absolute right-3 z-20 flex flex-col items-center gap-[16px]"
-                  style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset + 92}px)` }}>
-                  <button onClick={onFav} className="flex flex-col items-center gap-1 pressable" aria-pressed={isFav(curId)} aria-label="收藏">
+                <div className="absolute right-2 z-20 flex flex-col items-center gap-3.5"
+                  style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset + 104}px)` }}>
+                  <button onClick={onFav} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-pressed={isFav(curId)} aria-label="收藏">
                     {isFav(curId) ? <IStarF size={27} className="hg-gold" /> : <IStar size={27} className="hg-ink hg-ov-shadow" />}
-                    <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">收藏</span>
+                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">收藏</span>
                   </button>
-                  <button onClick={() => setPanel("comments")} className="flex flex-col items-center gap-1 pressable" aria-label="评论">
+                  <button onClick={() => setPanel("comments")} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="评论">
                     <ICommentF size={26} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">评论</span>
+                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">评论</span>
                   </button>
-                  <button onClick={() => setFs(true)} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
+                  <button onClick={() => setFs(true)} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="全屏">
                     <IExpand size={26} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">全屏</span>
+                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">全屏</span>
                   </button>
-                  <button onClick={shareLink} className="flex flex-col items-center gap-1 pressable" aria-label="分享">
+                  <button onClick={shareLink} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="分享">
                     <ILink size={25} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">分享</span>
+                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">分享</span>
                   </button>
                 </div>
               )}
@@ -692,18 +692,32 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               </div>
               )}
 
-              {/* 移动端：标题 + 详情标签 + 进度线（不加底色，只铺一层柔和压暗保证可读） */}
+              {/* 移动端：宋体大标题 + 两行简介 + 选集条 + 进度线（不加底色，只铺一层柔和压暗保证可读） */}
               {!fs && !isDesktop && (
                 <div className="absolute inset-x-0 z-20" style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset}px)` }}>
-                  <div className="absolute inset-x-0 bottom-0 h-[190px] pointer-events-none"
-                    style={{ background: "linear-gradient(0deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.42) 45%, transparent 100%)" }} />
-                  <p className="relative px-4 pb-2 text-[14px] font-semibold leading-snug hg-ink hg-ov-shadow clamp-2">{meta.title}</p>
-                  <div className="relative pt-1.5 pb-2.5">
-                    <button onClick={() => setPanel("detail")}
-                      className="px-4 flex items-center gap-0.5 text-[10.5px] font-medium hg-ink hg-ov-shadow pressable">
-                      详情 · 第 {curEp} 集<IChevR size={11} />
+                  <div className="absolute inset-x-0 bottom-0 h-[300px] pointer-events-none"
+                    style={{ background: "linear-gradient(0deg, rgba(0,0,0,.9) 0%, rgba(0,0,0,.5) 50%, transparent 100%)" }} />
+                  <button onClick={() => setPanel("detail")} aria-label="查看详情"
+                    className="relative block text-left pl-4 pb-3 pressable" style={{ width: "calc(100% - 72px)" }}>
+                    <span className="block font-serif text-[24px] font-bold leading-tight tracking-wide hg-ink hg-ov-shadow clamp-2">{meta.title}</span>
+                    {!!meta.desc && (
+                      <span className="block mt-2 text-[13px] leading-relaxed hg-ink-3 hg-ov-shadow clamp-2">{meta.desc}</span>
+                    )}
+                  </button>
+                  <div className="relative pb-2.5">
+                    <button onClick={() => setPanel(kind === "video" && episodes.length > 0 ? "episodes" : "detail")}
+                      className="hg-glass mx-4 w-[calc(100%-2rem)] h-11 px-3.5 flex items-center gap-2.5 text-[14px] pressable"
+                      style={{ borderRadius: "var(--r-md)" }}>
+                      <IList size={17} />
+                      {kind === "video" && episodes.length > 0 ? (
+                        <>
+                          <span className="font-semibold">选集</span>
+                          <span className="hg-ink-4 tabular-nums">第 {curEp} 集 · 共 {episodes.length} 集</span>
+                        </>
+                      ) : <span className="font-semibold">详情</span>}
+                      <IChevR size={15} className="ml-auto hg-ink-4" />
                     </button>
-                    <div ref={barRef} className="mx-4 mt-2 relative" style={{ height: 14, touchAction: "none" }}
+                    <div ref={barRef} className="mx-4 mt-2.5 relative" style={{ height: 14, touchAction: "none" }}
                       onPointerDown={onBarDown} onPointerMove={onBarMove} onPointerUp={onBarUp} onPointerCancel={onBarUp}>
                       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2.5px] rounded-full" style={{ background: "rgba(255,255,255,.3)" }}>
                         <div className="h-full rounded-full bg-white"
@@ -951,15 +965,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
       </div>
       {!isDesktop && !controlsLocked && active && (
-        <div className={`absolute z-40 flex items-center gap-2 ${fs ? "right-14" : "right-3"}`} style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
+        <div className={`absolute z-40 flex items-center gap-1.5 ${fs ? "right-14" : "right-3"}`} style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
           {!fs && <button onClick={() => setMuted(m => !m)} aria-label={muted ? "取消静音" : "静音"}
-            className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1">
+            className="hg-glass w-10 h-10 rounded-full flex items-center justify-center pressable">
             {muted ? <IVolMute size={17} /> : <IVol size={17} />}
           </button>}
           <button onClick={lockControls} aria-label="锁定播放控制" title="锁定播放控制" aria-pressed={false}
-            className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1"><ILockF size={17} /></button>
+            className="hg-glass w-10 h-10 rounded-full flex items-center justify-center pressable"><ILockF size={17} /></button>
           {!fs && <button onClick={() => store.setTab("search")} aria-label="搜索"
-            className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1"><ISearch size={18} /></button>}
+            className="hg-glass w-10 h-10 rounded-full flex items-center justify-center pressable"><ISearch size={18} /></button>}
         </div>
       )}
       {controlsLocked && <PlaybackLock active={active} onUnlock={() => { setControlsLocked(false); wake(); }} />}

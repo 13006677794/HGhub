@@ -539,6 +539,9 @@ html.theme-light .article-body { color: rgba(20,24,30,.82); }
 .hg-chip-strong  { background: rgba(0, 0, 0, .62); color: #fff; }
 .hg-chip:active  { background: rgba(0, 0, 0, .62); }
 .hg-ov-shadow    { text-shadow: 0 1px 8px rgba(0, 0, 0, .7); }
+/* 压在视频上的毛玻璃按钮 / 条：半透明白 + 背景模糊，颜色不跟主题走 */
+.hg-glass { background: rgba(255, 255, 255, .14); color: #fff; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); outline: none; -webkit-tap-highlight-color: transparent; }
+.hg-glass:active { background: rgba(255, 255, 255, .22); }
 
 /* 安卓 WebView 点按会留下系统黄色焦点框，视频/底栏这类沉浸按钮一律去掉 */
 .hg-tabbar button,
