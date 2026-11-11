@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts/noto-serif-sc-700.css";
 
 /* ===================================================================
    色板：深色默认（近黑底 + 银白渐变强调色），浅色 html.theme-light
@@ -69,8 +70,8 @@ html.theme-light {
 
 @theme inline {
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Roboto", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
-  /* 标题用宋体：只走系统自带字体（iOS/macOS 宋体-简、Android Noto Serif CJK、Windows 中易宋体），不打包字体文件 */
-  --font-serif: "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", serif;
+  /* 标题用宋体：优先用打包的 Noto Serif SC（见 fonts/noto-serif-sc-700.css），系统宋体兜底 */
+  --font-serif: "Noto Serif SC", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", serif;
   --color-canvas: var(--p-canvas);
   --color-bg: var(--p-bg);
   --color-s1: var(--p-s1);
