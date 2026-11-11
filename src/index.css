@@ -542,6 +542,8 @@ html.theme-light .article-body { color: rgba(20,24,30,.82); }
 /* 压在视频上的毛玻璃按钮 / 条：半透明白 + 背景模糊，颜色不跟主题走 */
 .hg-glass { background: rgba(255, 255, 255, .14); color: #fff; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); outline: none; -webkit-tap-highlight-color: transparent; }
 .hg-glass:active { background: rgba(255, 255, 255, .22); }
+/* 叠在封面图上的主要按钮：两个主题都用银白渐变 + 深色字（底下的图本身是深色） */
+.hg-on-photo-btn { background: linear-gradient(135deg, #ffffff 0%, #d9dde3 45%, #9aa3ae 100%); color: #0b0b0d; }
 
 /* 安卓 WebView 点按会留下系统黄色焦点框，视频/底栏这类沉浸按钮一律去掉 */
 .hg-tabbar button,
