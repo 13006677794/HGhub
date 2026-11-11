@@ -5,7 +5,7 @@ import type { User } from "./types";
 
 export type Platform = "android" | "ios" | "windows" | "macos";
 export type Theme = "dark" | "light";
-export type Tab = "home" | "search" | "category" | "profile";
+export type Tab = "home" | "category" | "chat" | "search" | "profile";
 
 /** 播放页上下文：ids 是来源列表，index 是当前条目。 */
 export type FeedContext = {

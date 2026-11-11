@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore, type Page, type Tab } from "./store";
-import { isMobile, selfTest } from "./api";
+import { isIos, isMobile, selfTest } from "./api";
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { runBack } from "./back";
 import Home from "./pages/Home";
 import Search, { RankPage } from "./pages/Search";
 import Category, { ChannelPage } from "./pages/Category";
 import Profile from "./pages/Profile";
+import Chat from "./pages/Chat";
 import SettingsPage from "./pages/Settings";
 import Feed from "./components/Feed";
 import { PostsPage, PostDetail } from "./pages/Posts";
@@ -15,44 +16,58 @@ import { ToastHost } from "./components/ui";
 import { DesktopRail, DesktopTitleBar } from "./components/DesktopChrome";
 import ResizeHandles from "./components/ResizeHandles";
 import { tracePlayback } from "./playbackDiagnostics";
-import { IGrid, IGridF, IHome, IHomeF, ISearch, IUser, IUserF, Logo } from "./icons";
+import {
+  ITabChat, ITabChatF, ITabGrid, ITabGridF, ITabHome, ITabHomeF, ITabSearch, ITabSearchF, ITabUser, ITabUserF, Logo,
+} from "./icons";
 
-/* ============ 底部标签栏（Android）—— 细瘦纯文字、低侵入 ============ */
+/* ============ 底部标签栏（手机端）：图标 + 文字，5 个入口 ============ */
+/* 栏高（不含底部安全区）：iOS 50，Android 64（选中项带药丸形高亮）。 */
+export const TAB_BAR_H = isIos ? 50 : 64;
+
+const TAB_ITEMS: { k: Tab; label: string; Icon: typeof ITabHome; Filled: typeof ITabHome }[] = [
+  { k: "home", label: "首页", Icon: ITabHome, Filled: ITabHomeF },
+  { k: "category", label: "分类", Icon: ITabGrid, Filled: ITabGridF },
+  { k: "chat", label: "爱聊", Icon: ITabChat, Filled: ITabChatF },
+  { k: "search", label: "搜索", Icon: ITabSearch, Filled: ITabSearchF },
+  { k: "profile", label: "我的", Icon: ITabUser, Filled: ITabUserF },
+];
+
 function TabBar() {
   const { tab, setTab, theme } = useStore();
-  const items: { k: Tab; label: string }[] = [
-    { k: "home", label: "首页" },
-    { k: "search", label: "搜索" },
-    { k: "category", label: "分类" },
-    { k: "profile", label: "我的" },
-  ];
-  /* 细瘦纯文字分栏：只有选中项高亮，没有指示点。
-     首页是沉浸视频 → 底栏压深色；搜索/分类/我的 是浅色内容页 →
-     浅色主题下底栏跟着换成浅色，深色主题保持深色。 */
+  /* 首页是沉浸视频 → 底栏固定压黑；其余内容页跟随主题。
+     未选中：线条图标；选中：实心图标（Android 外加药丸形高亮）。 */
   const overVideo = tab === "home";
   const lightBar = !overVideo && theme === "light";
+  const onColor = lightBar ? "var(--p-on)" : "#ffffff";
+  const idleColor = lightBar
+    ? (isIos ? "rgba(26,26,26,.55)" : "rgba(26,26,26,.66)")
+    : (isIos ? "rgba(244,241,236,.66)" : "rgba(244,241,236,.8)");
+  const pill = lightBar ? "rgba(0,0,0,.07)" : "rgba(255,255,255,.14)";
   return (
-    <nav className="hg-tabbar absolute bottom-0 inset-x-0 z-30"
+    <nav aria-label="主导航" className="hg-tabbar absolute bottom-0 inset-x-0 z-30"
       style={{
         paddingBottom: "var(--sab, 0px)",
-        background: lightBar ? "rgba(250, 250, 250, .97)" : overVideo ? "#000000" : "#141414",
+        background: lightBar ? "rgba(250, 250, 250, .97)" : overVideo ? "#000000" : "var(--p-s1)",
         borderTop: lightBar ? "1px solid rgba(0,0,0,.08)" : overVideo ? "none" : "1px solid rgba(255,255,255,.07)",
         boxShadow: lightBar ? "0 -2px 14px rgba(0,0,0,.05)" : "none",
       }}>
-      <div className="h-[40px] flex items-center px-1">
-        {items.map(({ k, label }) => {
+      <div className="flex items-stretch" style={{ height: TAB_BAR_H }}>
+        {TAB_ITEMS.map(({ k, label, Icon, Filled }) => {
           const on = tab === k;
+          const Glyph = on ? Filled : Icon;
           return (
-            <button key={k} onClick={() => setTab(k)} className="flex-1 h-full flex items-center justify-center pressable">
-              <span className="text-[12.5px] leading-none transition-colors duration-200"
-                style={{
-                  fontWeight: on ? 700 : 400,
-                  color: lightBar
-                    ? (on ? "var(--p-primary)" : "rgba(0,0,0,.45)")
-                    : (on ? "#ffffff" : "rgba(255,255,255,.6)"),
-                }}>
-                {label}
-              </span>
+            <button key={k} onClick={() => setTab(k)} aria-current={on ? "page" : undefined}
+              className="flex-1 flex flex-col items-center justify-center pressable transition-colors duration-200"
+              style={{ gap: isIos ? 3 : 4, color: on ? onColor : idleColor }}>
+              {isIos
+                ? <Glyph size={25} />
+                : (
+                  <span className="flex items-center justify-center transition-colors duration-200"
+                    style={{ width: 56, height: 28, borderRadius: 14, background: on ? pill : "transparent" }}>
+                    <Glyph size={23} />
+                  </span>
+                )}
+              <span className="leading-none" style={{ fontSize: isIos ? 11 : 12, fontWeight: on ? 600 : 500 }}>{label}</span>
             </button>
           );
         })}
@@ -117,7 +132,7 @@ function AppBody() {
 
   const vis = (k: Tab) => (tab === k ? "absolute inset-0" : "absolute inset-0 invisible pointer-events-none");
   const pageActive = stack.length === 0 && !loginOpen;
-  const bottomInset = isMobile ? (fs ? 0 : 40) : 14;
+  const bottomInset = isMobile ? (fs ? 0 : TAB_BAR_H) : 14;
   /* 栈页（从搜索/分类/我的进入的播放页、图文页）没有底栏，
      底部只让出安全区。之前多留了 20px，视频底边会露出一条
      「底栏」似的窄缝（底部的压暗渐变到不了屏幕最底）。 */
@@ -131,6 +146,7 @@ function AppBody() {
         <div className={vis("search")}><Search active={pageActive && tab === "search"} wide={wide} /></div>
         <div className={vis("category")}><Category wide={wide} active={pageActive && tab === "category"} /></div>
         <div className={vis("profile")}><Profile wide={wide} /></div>
+        {isMobile && <div className={vis("chat")}><Chat /></div>}
 
         {stack.map((p, i) => (
           <div key={p.key} className="absolute inset-0 z-30 bg-bg a-page-in" style={{ boxShadow: "-18px 0 40px rgba(0,0,0,.5)" }}>

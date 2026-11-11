@@ -245,6 +245,11 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               <span className="text-[12px] text-on/85">PolyForm Noncommercial 1.0.0</span>
               <span className="ml-auto text-[10.5px] text-mut">仅限非商业</span>
             </div>
+            <div className="flex items-center gap-2 py-2.5">
+              <IInfo size={15} className="text-mut" />
+              <span className="text-[12px] text-on/85">底栏图标：Solar Icons by 480 Design</span>
+              <span className="ml-auto text-[10.5px] text-mut">CC BY 4.0</span>
+            </div>
           </div>
 
           <button onClick={() => setAbout(false)} className="mt-4 w-full h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on pressable">知道了</button>
