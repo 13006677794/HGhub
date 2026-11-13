@@ -126,6 +126,10 @@ fn proxy_override() -> Option<String> {
 /// 旧客户端仍会往 `127.0.0.1:7897` 建隧道，症状是满屏 `tunnel error: failed to create
 /// underlying connection`（浏览器却是通的，因为它每次都重读系统代理）。所以这里允许重建。
 fn build_client(host: &str, addrs: &[SocketAddr]) -> Result<reqwest::Client, String> {
+    build_client_mode(host, addrs, true)
+}
+
+fn build_client_mode(host: &str, addrs: &[SocketAddr], use_proxy: bool) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .user_agent(UA)
         .timeout(Duration::from_secs(20))
@@ -138,10 +142,14 @@ fn build_client(host: &str, addrs: &[SocketAddr]) -> Result<reqwest::Client, Str
     if !addrs.is_empty() {
         builder = builder.resolve_to_addrs(host, addrs);
     }
-    if let Some(p) = proxy_override() {
-        // 错误信息不能含原始代理 URL（其中可能有用户名/密码）。
-        let proxy = reqwest::Proxy::all(&p).map_err(|_| "HGHUB_PROXY 配置无效（已隐藏原始值）")?;
-        builder = builder.proxy(proxy);
+    if use_proxy {
+        if let Some(p) = proxy_override() {
+            // 错误信息不能含原始代理 URL（其中可能有用户名/密码）。
+            let proxy = reqwest::Proxy::all(&p).map_err(|_| "HGHUB_PROXY 配置无效（已隐藏原始值）")?;
+            builder = builder.proxy(proxy);
+        }
+    } else {
+        builder = builder.no_proxy();
     }
     builder
         .build()
@@ -199,12 +207,176 @@ pub fn refresh_client() {
     }
 }
 
+fn media_headers(raw: &str) -> Vec<(String, String)> {
+    cdn_for(raw).filter(|auth| auth.applies(raw)).map(|auth| {
+        vec![
+            (auth.key, auth.value),
+            ("x-cdn-app".to_string(), auth.app),
+        ]
+    }).unwrap_or_default()
+}
+
+/// 这个 CDN 按域名走 Shadowrocket 会立刻 503。记住之后直接走真实 IP 转发。
+static DIRECT_HOSTS: Lazy<Mutex<HashMap<String, Instant>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn prefers_direct(host: &str) -> bool {
+    DIRECT_HOSTS.lock().ok().and_then(|g| g.get(host).copied()).is_some_and(|at| at.elapsed() < Duration::from_secs(600))
+}
+
+fn mark_direct(host: &str) {
+    if let Ok(mut guard) = DIRECT_HOSTS.lock() {
+        guard.insert(host.to_string(), Instant::now());
+    }
+}
+
+/// 媒体 GET：带上该 CDN 主机记住的鉴权头。
+/// 域名隧道一旦失败，同一主机后续请求直接走真实 IP，不再每次空等 20 秒。
+async fn get_media(raw: &str, timeout: Duration, referer: Option<&str>) -> Result<reqwest::Response, String> {
+    let extra = media_headers(raw);
+    let host = url::Url::parse(raw).ok().and_then(|u| u.host_str().map(|h| h.to_string())).unwrap_or_default();
+    if prefers_direct(&host) {
+        crate::logging::trace(&format!("cdn.direct host={host}"));
+        return get_unpinned(raw, timeout, referer, &extra).await;
+    }
+    match tokio::time::timeout(Duration::from_secs(4), get_inner(raw, timeout, None, referer, &extra)).await {
+        Ok(Ok(resp)) => Ok(resp),
+        Ok(Err(error)) if !connect_failed(&error) => Err(error),
+        Ok(Err(_)) | Err(_) => {
+            crate::logging::trace(&format!("cdn.fallback host={host}"));
+            mark_direct(&host);
+            get_unpinned(raw, timeout, referer, &extra).await
+        }
+    }
+}
+
+/// 向公共 DNS 要 A 记录，避开本机把 CDN 改成 198.18.0.0/15 的解析。
+async fn public_https_addrs(host: &str) -> Result<Vec<SocketAddr>, String> {
+    if host.parse::<std::net::IpAddr>().is_ok() {
+        return Ok(Vec::new());
+    }
+    let client = build_client_mode("cloudflare-dns.com", &[], true)?;
+    let url = format!("https://cloudflare-dns.com/dns-query?name={host}&type=A");
+    let value: Value = client
+        .get(url)
+        .header("Accept", "application/dns-json")
+        .send()
+        .await
+        .map_err(|e| err_text(&e))?
+        .json()
+        .await
+        .map_err(|e| err_text(&e))?;
+    let addrs: Vec<SocketAddr> = value
+        .get("Answer")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items.iter().filter_map(|item| {
+                if item.get("type").and_then(|v| v.as_u64()) != Some(1) {
+                    return None;
+                }
+                let ip = item.get("data").and_then(|v| v.as_str())?;
+                let addr: std::net::IpAddr = ip.parse().ok()?;
+                if network_policy::allowed_ip(addr) && !is_fake_ip(addr) {
+                    Some(SocketAddr::new(addr, 443))
+                } else {
+                    None
+                }
+            }).take(4).collect()
+        })
+        .unwrap_or_default();
+    if addrs.is_empty() {
+        Err("公共 DNS 没有可用地址".into())
+    } else {
+        Ok(addrs)
+    }
+}
+
+static BRIDGES: Lazy<Mutex<HashMap<String, u16>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// 本机端口转发：进来的 TLS 原样送到 CDN 的真实 IP，代理只看见 IP 隧道。
+async fn cdn_bridge(host: &str, port: u16, ip: std::net::IpAddr) -> Result<u16, String> {
+    let key = format!("{host}:{port}:{ip}");
+    if let Some(local) = BRIDGES.lock().ok().and_then(|g| g.get(&key).copied()) {
+        return Ok(local);
+    }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.map_err(|e| e.to_string())?;
+    let local = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let remote = SocketAddr::new(ip, port);
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut inbound, _)) = listener.accept().await else { break };
+            tokio::spawn(async move {
+                // 这一跳必须直连真实地址。系统代理会把所有连接送回 Shadowrocket，
+                // 而它按域名已经拒绝了这个 CDN。
+                let socket = tokio::net::TcpSocket::new_v4();
+                let outbound = match socket {
+                    Ok(sock) => sock.connect(remote).await,
+                    Err(_) => tokio::net::TcpStream::connect(remote).await,
+                };
+                if let Ok(mut outbound) = outbound {
+                    let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+                }
+            });
+        }
+    });
+    if let Ok(mut guard) = BRIDGES.lock() {
+        guard.insert(key, local);
+    }
+    Ok(local)
+}
+
+fn is_fake_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.octets()[0] == 198 && matches!(v4.octets()[1], 18 | 19),
+        std::net::IpAddr::V6(_) => false,
+    }
+}
+
+fn connect_failed(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    is_proxy_error(&lower) || lower.contains("connect") || lower.contains("reset") || lower.contains("eof")
+}
+
+/// 代理按域名拒绝 CDN 时，经本地转发再用真实 IP 走代理。
+/// 转发层把 Host 和证书名恢复成原 CDN 域名。
+async fn get_unpinned(raw: &str, timeout: Duration, referer: Option<&str>, extra: &[(String, String)]) -> Result<reqwest::Response, String> {
+    let target = network_policy::parse_target(raw)?;
+    let host = target.host_str().ok_or("目标缺少主机名")?.to_string();
+    let port = target.port_or_known_default().unwrap_or(443);
+    let addrs = public_https_addrs(&host).await?;
+    let ip = addrs.first().ok_or("公共 DNS 没有可用地址")?.ip();
+    let local = cdn_bridge(&host, port, ip).await?;
+    let mut bridged = target.clone();
+    // 这个 CDN 的证书签给 *.cdn.myqcloud.com，不签给播放域名，也不签给 IP。
+    // 本地转发只改连接地址，TLS 用证书认可的名字。
+    bridged.set_host(Some("hghub.cdn.myqcloud.com")).map_err(|_| "无法改写 CDN 校验名")?;
+    let _ = bridged.set_port(Some(local));
+    let http = build_client_mode("hghub.cdn.myqcloud.com", &[SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), local)], false)?;
+    let mut request = http.get(bridged).timeout(timeout).header("Host", &host);
+    if let Some(value) = referer {
+        request = request.header("Referer", value);
+    }
+    for (name, value) in extra {
+        request = request.header(name.as_str(), value.as_str());
+    }
+    request.send().await.map_err(|e| err_text(&e))
+}
+
 /// 不可信 GET 的统一入口；自动重定向被关闭，每一跳重新检查 URL、DNS 并固定解析地址。
 pub async fn get(
     raw: &str,
     timeout: Duration,
     accept: Option<&str>,
     referer: Option<&str>,
+) -> Result<reqwest::Response, String> {
+    get_inner(raw, timeout, accept, referer, &[]).await
+}
+
+async fn get_inner(
+    raw: &str,
+    timeout: Duration,
+    accept: Option<&str>,
+    referer: Option<&str>,
+    extra: &[(String, String)],
 ) -> Result<reqwest::Response, String> {
     tokio::time::timeout(timeout, async {
         let policy_error = |phase: &str, error: String| {
@@ -222,6 +394,9 @@ pub async fn get(
             }
             if let Some(value) = referer {
                 request = request.header("Referer", value);
+            }
+            for (name, value) in extra {
+                request = request.header(name.as_str(), value.as_str());
             }
             let response = request.send().await.map_err(|e| err_text(&e))?;
             if !matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
@@ -613,6 +788,57 @@ pub async fn edge(
     }
 }
 
+/// 官网播放接口下发的 CDN 鉴权。m3u8 清单必须带这两个头，分片按 otherEnabled 决定。
+#[derive(Clone, Default)]
+pub struct CdnAuth {
+    pub m3u8: bool,
+    pub other: bool,
+    pub key: String,
+    pub value: String,
+    pub app: String,
+}
+
+impl CdnAuth {
+    pub fn from_playback(data: &Value) -> Self {
+        let cdn = data.get("cdn");
+        Self {
+            m3u8: cdn.and_then(|v| v.get("m3u8Enabled")).and_then(|v| v.as_bool()).unwrap_or(false),
+            other: cdn.and_then(|v| v.get("otherEnabled")).and_then(|v| v.as_bool()).unwrap_or(false),
+            key: cdn.and_then(|v| v.get("authKey")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            value: cdn.and_then(|v| v.get("authValue")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            app: cdn.and_then(|v| v.get("app")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        }
+    }
+
+    fn applies(&self, url: &str) -> bool {
+        if self.key.is_empty() || self.value.is_empty() || self.app.is_empty() {
+            return false;
+        }
+        let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+        let media = path.contains(".ts") || path.contains(".m4s") || path.contains(".key");
+        (self.m3u8 && path.contains(".m3u8")) || ((self.other || self.m3u8) && media)
+    }
+}
+
+/// 同一部片子的清单、子清单、分片共用一次下发的鉴权，按主机记住。
+pub fn remember_cdn(url: &str, auth: CdnAuth) {
+    let Ok(parsed) = url::Url::parse(url) else { return };
+    let Some(host) = parsed.host_str().map(|h| h.to_ascii_lowercase()) else { return };
+    if let Ok(mut guard) = CDN_AUTH.lock() {
+        if guard.len() > 16 {
+            guard.clear();
+        }
+        guard.insert(host, auth);
+    }
+}
+
+fn cdn_for(url: &str) -> Option<CdnAuth> {
+    let host = url::Url::parse(url).ok()?.host_str()?.to_ascii_lowercase();
+    CDN_AUTH.lock().ok()?.get(&host).cloned()
+}
+
+static CDN_AUTH: Lazy<Mutex<HashMap<String, CdnAuth>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
 /// 拉原始字节（图片 / m3u8 / 分片）。
 pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String> {
     static NEXT_REQUEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -633,7 +859,7 @@ pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String>
             let mut status = None;
             let mut headers_ms = None;
             let result = async {
-                let resp = get(&url, Duration::from_secs(20), None, Some(&referer)).await?;
+                let resp = get_media(&url, Duration::from_secs(20), Some(&referer)).await?;
                 status = Some(resp.status().as_u16());
                 headers_ms = Some(started.elapsed().as_millis() as u64);
                 if !resp.status().is_success() {

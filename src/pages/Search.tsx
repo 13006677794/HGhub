@@ -6,7 +6,7 @@ import { Masonry, RankRow } from "../components/cards";
 import { Empty, Img } from "../components/ui";
 import { IBack, IChevR, IClose, IFireF, ISearch, ITrophy } from "../icons";
 
-const HOT_TAGS = ["都市", "逆袭", "古风", "系统", "后宫", "校园", "仙侠", "职场", "大男主", "御姐", "脑洞", "奇幻"];
+const HOT_TAGS = ["古风", "逆袭", "都市", "年代", "职场", "仙侠"];
 
 export default function Search({ active, wide }: { active: boolean; wide: boolean }) {
   const { push, searchHist, addSearch, clearSearchHist, toast } = useStore();
@@ -82,10 +82,15 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
             className="flex-1 min-w-0 bg-transparent text-[16px] text-on placeholder-dim outline-none" />
           {q && <button type="button" aria-label="清空输入" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }} className="w-7 h-7 -mr-1 rounded-full flex items-center justify-center text-mut pressable"><span className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center"><IClose size={11} /></span></button>}
         </form>
-        <button onClick={() => push({ kind: "ranks" })} aria-label="排行榜"
-          className="w-11 h-11 rounded-full flex items-center justify-center text-on pressable">
-          <ITrophy size={22} />
-        </button>
+        {querying ? (
+          <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }}
+            className="h-11 px-2 text-[16px] text-on pressable">取消</button>
+        ) : (
+          <button onClick={() => push({ kind: "ranks" })} aria-label="排行榜"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-on pressable">
+            <ITrophy size={22} />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 scroll-y pb-24">
@@ -108,10 +113,12 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
 
             <section className="pt-7 a-rise">
               <h2 className="px-4 mb-3 text-[17px] font-bold text-on">按题材找</h2>
-              <div className="grid grid-cols-4 gap-2 px-4">
+              <div className="grid grid-cols-3 gap-2 px-4">
                 {HOT_TAGS.map((t) => (
                   <button key={t} onClick={() => { setQ(t); submit(t); }}
-                    className="h-12 rounded-(--r-md) bg-s1 font-serif text-[16px] font-bold text-on tracking-wide pressable">{t}</button>
+                    className="relative h-[72px] overflow-hidden rounded-(--r-md) bg-s1 text-on pressable">
+                    <span className="absolute left-3 bottom-2 font-serif text-[18px] font-bold tracking-wide">{t}</span>
+                  </button>
                 ))}
               </div>
             </section>
@@ -130,8 +137,8 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
                     <span className="absolute left-0 top-0 px-2 py-0.5 rounded-br-[10px] brand-grad font-serif text-[15px] font-bold">1</span>
                   </span>
                   <span className="flex-1 min-w-0 flex flex-col gap-1.5 pt-0.5">
-                    <span className="font-serif text-[19px] font-bold text-on leading-snug tracking-wide clamp-2">{hot[0].title}</span>
-                    <span className="text-[13px] text-dim truncate">{hot[0].tags?.slice(0, 3).join(" · ")}</span>
+                    <span className="font-serif text-[19px] font-bold text-on leading-snug tracking-wide clamp-1">{hot[0].title}</span>
+                    <span className="text-[13px] text-dim truncate">{[hot[0].tags?.[0] || hot[0].cate_name, hot[0].is_finished ? `全 ${hot[0].episode_count} 集` : `${hot[0].episode_count} 集`].filter(Boolean).join(" · ")}</span>
                     <span className="mt-auto flex items-center gap-1 text-[12px] font-semibold text-primary tabular-nums"><IFireF size={13} />热度 {fmt(hot[0].metric_value)}</span>
                   </span>
                 </button>

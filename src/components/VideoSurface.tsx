@@ -1,6 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, useState } from "react";
 import Hls from "hls.js";
-import { isLocalMedia, playlist } from "../api";
+import { isIos, isLocalMedia, logLine, playlist } from "../api";
 import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
 import { usePlaybackActivity } from "../usePlaybackActivity";
 
@@ -103,7 +103,7 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
         interstitialsController: undefined,
         contentSteeringController: undefined,
         enableInterstitialPlayback: false,
-        enableWorker: true,
+        enableWorker: !isIos,
         // Prefer standard MSE on macOS; hls.js handles MMS-only fallback and seek recovery.
         preferManagedMediaSource: false,
         autoStartLoad: false,
@@ -111,7 +111,8 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
         backBufferLength: 30,
         manifestLoadingTimeOut: 20000,
         manifestLoadingMaxRetry: 3,
-        fragLoadingMaxRetry: 4,
+        fragLoadingTimeOut: 30000,
+        fragLoadingMaxRetry: 6,
       });
       hlsRef.current = hls;
       observeHls(hls, trace);
@@ -121,16 +122,26 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
         if (activity.isActive()) hls.startLoad();
         if (autoPlay) activity.play("manifest_autoplay", true);
       });
+      let recoveries = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
+        if (activity.isActive() && recoveries < 2) {
+          recoveries += 1;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls.startLoad(); return; }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+        }
+        logLine(`player.error ${data.type}/${data.details} http=${data.response?.code ?? ""}`);
         onError?.(`${data.type}/${data.details}`);
-        if (!activity.isActive()) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-        else { hls.destroy(); hlsRef.current = null; }
+        if (data.type !== Hls.ErrorTypes.NETWORK_ERROR && data.type !== Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.destroy();
+          hlsRef.current = null;
+        }
       });
     } else {
+      logLine(`player.native src_len=${url.length}`);
       video.src = url;
+      video.onerror = () => logLine(`player.native.error code=${video.error?.code ?? 0}`);
+      video.onloadeddata = () => logLine("player.native.loaded");
       if (autoPlay) activity.play("native_autoplay", true);
     }
 

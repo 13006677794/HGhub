@@ -39,7 +39,7 @@ export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; o
         <ISidebar size={17} strokeWidth={1.7} />
       </button>
       <div className="win-drag-region" data-tauri-drag-region />
-      <button className="win-caption-tool" aria-label="切换外观" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+      <button className="win-caption-tool" aria-label="切换外观" onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}>
         {theme === "dark" ? <ISun size={17} strokeWidth={1.7} /> : <IMoon size={17} strokeWidth={1.7} />}
       </button>
       <button className="win-caption-tool" aria-label="搜索" onClick={() => setTab("search")}>

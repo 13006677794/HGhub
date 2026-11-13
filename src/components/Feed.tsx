@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, cover, fmt, fmtTime, isMobile, mediaUrl } from "../api";
+import { api, cover, fmt, fmtTime, isMobile, logLine, mediaUrl, whenMediaReady } from "../api";
 import type { Detail, Episode, Post, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Avatar, Img, Sheet } from "./ui";
@@ -23,6 +23,9 @@ type Props = {
   bottomInset: number;
   onBack?: () => void;
   onNearEnd?: () => void;
+  /** 首页：推荐 / 追剧 */
+  homeFeed?: "recommend" | "follow";
+  onHomeFeed?: (feed: "recommend" | "follow") => void;
   /** 从观看记录续播：起始集数与秒数 */
   startEp?: number;
   startTime?: number;
@@ -32,7 +35,7 @@ const RATES = [1, 1.25, 1.5, 2];
 
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 
-export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, startEp, startTime }: Props) {
+export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, homeFeed, onHomeFeed, startEp, startTime }: Props) {
   const store = useStore();
   const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen } = store;
   const isDesktop = !isMobile;
@@ -214,9 +217,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   useEffect(() => {
     let alive = true;
     const need = [videoIds[index], videoIds[index + 1], videoIds[index - 1]].filter(Boolean);
+    const loadDetail = (id: number, attempt = 0) => {
+      api.video(id).then((d) => { if (alive) setDetails((m) => ({ ...m, [id]: d })); }).catch(() => {
+        if (alive && attempt < 1) window.setTimeout(() => loadDetail(id, attempt + 1), 700);
+      });
+    };
     need.forEach((id) => {
       if (details[id]) return;
-      api.video(id).then((d) => { if (alive) setDetails((m) => ({ ...m, [id]: d })); }).catch(() => {});
+      loadDetail(id);
     });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,14 +247,28 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (!curId) return;
     if (playUrls[playKey]) return;
     let alive = true;
-    api.play(curId, curEp, kind)
-      .then((info) => {
-        if (!alive) return;
-        if (!info?.video_url) throw new Error("暂无播放地址");
-        setPlayUrls((m) => ({ ...m, [playKey]: info.video_url }));
-        addHistory(curId, curEp);
-      })
-      .catch((e) => { if (alive) setErr((e as Error).message || "取播放地址失败"); });
+    const loadPlay = (attempt = 0) => {
+      logLine(`play.wait id=${curId} ep=${curEp}`);
+      whenMediaReady().then(() => api.play(curId, curEp, kind))
+        .then((info) => {
+          if (!alive) return;
+          if (!info?.video_url) throw new Error("暂无播放地址");
+          logLine(`play.ready len=${info.video_url.length}`);
+          setErr("");
+          setWaiting(false);
+          setPlayUrls((m) => ({ ...m, [playKey]: info.video_url }));
+          addHistory(curId, curEp);
+        })
+        .catch((e) => {
+          if (!alive) return;
+          const message = (e as Error).message || "取播放地址失败";
+          logLine(`play.fail attempt=${attempt} ${message.slice(0, 180)}`);
+          // 502 这类网关错误立刻显示，不要让转圈一直盖住。
+          if (attempt < 1 && !/502|暂无播放地址/.test(message)) window.setTimeout(() => loadPlay(attempt + 1), 600);
+          else setErr(message);
+        });
+    };
+    loadPlay();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId, curEp]);
@@ -549,7 +571,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onTime={onTimeTick}
                   onDuration={onDurationTick}
                   onSize={(w, h) => setVsize({ w, h })}
-                  onPlaying={() => { setPaused(false); setWaiting(false); }}
+                  onPlaying={() => { setErr(""); setPaused(false); setWaiting(false); }}
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
                   onEnded={() => { const next = episodes.find((e) => e.ep_num === curEp + 1); if (next) pickEp(next.ep_num); }}
@@ -594,26 +616,35 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 )
               ) : null}
 
-              {/* 右侧操作栏（移动端）：收藏 / 评论 / 全屏 / 分享
-                  颜色写死不跟主题走：浅色主题下这些字必须仍是白色 */}
+              {/* 右侧操作栏（移动端）
+                  首页：点赞 / 收藏 / 评论 / 分享，数字写在图标下。
+                  其他播放页保留全屏入口。颜色不跟主题走。 */}
               {!fs && !isDesktop && (
                 <div className="absolute right-2 z-20 flex flex-col items-center gap-3.5"
                   style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset + 104}px)` }}>
+                  {mode === "home" && kind === "video" && (
+                    <button onClick={onLike} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-pressed={isLiked(curId)} aria-label="点赞">
+                      {isLiked(curId) ? <IHeartF size={28} className="text-[#ff6f8c]" /> : <IHeart size={28} className="hg-ink hg-ov-shadow" />}
+                      <span className="text-[12px] font-semibold hg-ink tabular-nums hg-ov-shadow">{fmt(likeCount)}</span>
+                    </button>
+                  )}
                   <button onClick={onFav} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-pressed={isFav(curId)} aria-label="收藏">
                     {isFav(curId) ? <IStarF size={27} className="hg-gold" /> : <IStar size={27} className="hg-ink hg-ov-shadow" />}
-                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">收藏</span>
+                    <span className="text-[12px] font-semibold hg-ink tabular-nums hg-ov-shadow">{mode === "home" ? fmt(meta.collect) : "收藏"}</span>
                   </button>
                   <button onClick={() => setPanel("comments")} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="评论">
                     <ICommentF size={26} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">评论</span>
+                    <span className="text-[12px] font-semibold hg-ink tabular-nums hg-ov-shadow">{mode === "home" ? fmt(meta.comment) : "评论"}</span>
                   </button>
-                  <button onClick={() => setFs(true)} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="全屏">
-                    <IExpand size={26} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">全屏</span>
-                  </button>
+                  {mode !== "home" && (
+                    <button onClick={() => setFs(true)} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="全屏">
+                      <IExpand size={26} className="hg-ink hg-ov-shadow" />
+                      <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">全屏</span>
+                    </button>
+                  )}
                   <button onClick={shareLink} className="w-12 min-h-12 flex flex-col items-center justify-center gap-1 pressable" aria-label="分享">
                     <ILink size={25} className="hg-ink hg-ov-shadow" />
-                    <span className="text-[12px] font-medium hg-ink-2 hg-ov-shadow">分享</span>
+                    <span className="text-[12px] font-semibold hg-ink hg-ov-shadow">分享</span>
                   </button>
                 </div>
               )}
@@ -699,7 +730,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     style={{ background: "linear-gradient(0deg, rgba(0,0,0,.9) 0%, rgba(0,0,0,.5) 50%, transparent 100%)" }} />
                   <button onClick={() => setPanel("detail")} aria-label="查看详情"
                     className="relative block text-left pl-4 pb-3 pressable" style={{ width: "calc(100% - 72px)" }}>
-                    <span className="block font-serif text-[24px] font-bold leading-tight tracking-wide hg-ink hg-ov-shadow clamp-2">{meta.title}</span>
+                    {mode === "home" && kind === "video" && (
+                      <span className="mb-2 flex items-center gap-2 text-[12px] text-white/70">
+                        {index === 0 && homeFeed !== "follow" && <span className="brand-grad rounded-md px-2 py-0.5 text-[12px] font-bold text-[#0b0b0d]">热播 No.1</span>}
+                        {!!meta.tags.length && <span className="truncate">{[...meta.tags.slice(0, 2), detail?.is_finished ? "已完结" : ""].filter(Boolean).join(" · ")}</span>}
+                      </span>
+                    )}
+                    <span className={`block font-serif font-bold leading-tight tracking-wide hg-ink hg-ov-shadow clamp-2 ${mode === "home" ? "text-[32px]" : "text-[24px]"}`}>{meta.title}</span>
                     {!!meta.desc && (
                       <span className="block mt-2 text-[13px] leading-relaxed hg-ink-3 hg-ov-shadow clamp-2">{meta.desc}</span>
                     )}
@@ -964,7 +1001,34 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         </>
       )}
       </div>
-      {!isDesktop && !controlsLocked && active && (
+      {!isDesktop && !controlsLocked && active && mode === "home" && !fs && (
+        <div className="absolute inset-x-0 z-40 flex items-center pl-3 pr-1" style={{ top: "calc(var(--sat, 0px) + 6px)", height: 44 }}>
+          <div role="tablist" className="flex items-center gap-5 pl-2">
+            {([["recommend", "推荐"], ["follow", "追剧"]] as const).map(([k, label]) => {
+              const on = (homeFeed || "recommend") === k;
+              return (
+                <button key={k} role="tab" aria-selected={on} onClick={() => onHomeFeed?.(k)}
+                  className={`relative pressable ${on ? "text-[18px] font-bold text-white" : "text-[16px] font-medium text-white/60"}`}>
+                  {label}
+                  {on && <span className="absolute left-1/2 -translate-x-1/2 -bottom-2 h-[3px] w-4 rounded-full brand-grad" />}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-auto flex items-center">
+            <button onClick={() => setMuted((m) => !m)} aria-label={muted ? "取消静音" : "静音"} className="w-11 h-11 flex items-center justify-center pressable">
+              <span className="hg-glass w-9 h-9 rounded-full flex items-center justify-center">{muted ? <IVolMute size={18} /> : <IVol size={18} />}</span>
+            </button>
+            <button onClick={lockControls} aria-label="锁定操作" className="w-11 h-11 flex items-center justify-center pressable">
+              <span className="hg-glass w-9 h-9 rounded-full flex items-center justify-center"><ILockF size={17} /></span>
+            </button>
+            <button onClick={() => store.setTab("search")} aria-label="搜索" className="w-11 h-11 flex items-center justify-center pressable">
+              <span className="hg-glass w-9 h-9 rounded-full flex items-center justify-center"><ISearch size={18} /></span>
+            </button>
+          </div>
+        </div>
+      )}
+      {!isDesktop && !controlsLocked && active && mode !== "home" && (
         <div className={`absolute z-40 flex items-center gap-1.5 ${fs ? "right-14" : "right-3"}`} style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
           {!fs && <button onClick={() => setMuted(m => !m)} aria-label={muted ? "取消静音" : "静音"}
             className="hg-glass w-10 h-10 rounded-full flex items-center justify-center pressable">

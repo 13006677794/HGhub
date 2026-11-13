@@ -9,8 +9,6 @@ import { IBack, IChevR, IGrid, ITrophy } from "../icons";
 export const CHANNELS = [
   { cate: "ai-duanju", name: "AI成人短剧", desc: "高能反转 · 一口气看完" },
   { cate: "ai-manju", name: "AI成人漫剧", desc: "国创漫剧 · 每周更新" },
-  { cate: "ai-huanlian", name: "AI换脸", desc: "换脸演绎 · 全新剧情" },
-  { cate: "ai-mogai", name: "AI魔改", desc: "魔改名场面 · 脑洞大开" },
 ] as const;
 
 /* ================= 分类总览 ================= */
@@ -65,7 +63,7 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
     <div className="absolute inset-0 bg-bg flex flex-col">
       <div className="shrink-0 px-4 pb-1" style={{ paddingTop: "calc(var(--sat, 0px) + 14px)" }}>
         <div className="flex items-end gap-2.5">
-          <h1 className="text-[24px] font-bold text-on leading-none">分类</h1>
+          <h1 className="text-[28px] font-bold text-on leading-none">分类</h1>
           <span className="text-[13px] text-dim">{CHANNELS.length + 1} 个频道 · 每周上新</span>
         </div>
       </div>
@@ -91,6 +89,28 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
           )}
           <IChevR size={16} className="text-dim shrink-0" />
         </button>
+
+        {(() => {
+          const featured = CHANNELS.map((c) => rows[c.cate]?.[0]).find(Boolean);
+          if (!featured) return null;
+          const list = CHANNELS.flatMap((c) => rows[c.cate] || []);
+          return (
+            <button onClick={() => push({ kind: "feed", videoIds: list.map((x) => x.id), index: Math.max(0, list.findIndex((x) => x.id === featured.id)), title: "本周上新" })}
+              className="mx-4 mb-7 block w-[calc(100%-2rem)] overflow-hidden rounded-(--r-lg) bg-s1 text-left pressable">
+              <span className="relative block h-[168px]">
+                <Img src={featured.cover} />
+                <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                <span className="absolute left-4 top-4 font-serif text-[20px] font-bold tracking-wide text-white">本周上新</span>
+                <span className="absolute right-4 top-4 font-serif text-[15px] font-bold text-white tsh" style={{ writingMode: "vertical-rl", letterSpacing: ".12em" }}>{featured.title}</span>
+                <span className="absolute left-4 bottom-4">
+                  <span className="block text-[12px] text-white/70">最新上架</span>
+                  <span className="mt-1 block font-serif text-[22px] font-bold text-white">{featured.title}</span>
+                  <span className="mt-1 block text-[13px] text-white/70">{featured.tags?.[0] || "短剧"} · {featured.is_finished ? `全 ${featured.total_episodes || featured.episode_count} 集` : `更新至 ${featured.episode_count}`}</span>
+                </span>
+              </span>
+            </button>
+          );
+        })()}
 
         {CHANNELS.map((c, ci) => {
           const list = rows[c.cate] || [];

@@ -405,6 +405,19 @@ pub(crate) fn play_info_from_playback(data: Value, id: i64, ep: u32) -> Result<V
     }))
 }
 
+/// iOS 播放器读取本机 HTTP 媒体服务。其它平台继续用自定义协议。
+#[tauri::command]
+pub fn media_origin() -> Option<String> {
+    #[cfg(target_os = "ios")]
+    {
+        crate::media_http::origin()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        None
+    }
+}
+
 #[tauri::command]
 pub async fn api_play(
     state: State<'_, Api>,
@@ -424,7 +437,15 @@ pub async fn api_play(
     } else {
         format!("/api/videos/{id}/playback")
     };
+    crate::logging::trace(&format!("play.begin kind={kind:?} ep={ep}"));
     let data = state.post_optional(&path, json!({})).await?;
+    if let Some(url) = data.pointer("/streams/main").and_then(|v| v.as_str()) {
+        let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
+        crate::logging::trace(&format!("play.address host={host} len={}", url.len()));
+        crate::net::remember_cdn(url, crate::net::CdnAuth::from_playback(&data));
+    } else {
+        crate::logging::trace("play.address empty");
+    }
     play_info_from_playback(data, id, ep)
 }
 

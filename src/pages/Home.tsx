@@ -7,7 +7,8 @@ import { ISearch } from "../icons";
 import { Empty } from "../components/ui";
 
 export default function Home({ active, bottomInset }: { active: boolean; bottomInset: number }) {
-  const { toast } = useStore();
+  const { toast, history } = useStore();
+  const [feed, setFeed] = useState<"recommend" | "follow">("recommend");
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -41,13 +42,20 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
 
   useEffect(() => { if (!items.length) load(1); /* eslint-disable-next-line */ }, []);
 
-  const ids = items.map((v) => v.id);
+  const followed = history.map((h) => h.id);
+  const ids = feed === "follow" ? followed : items.map((v) => v.id);
+  const showFeed = ids.length > 0;
 
   return (
     <div className="absolute inset-0 bg-black">
-      {items.length ? (
-        <Feed videoIds={ids} mode="home" active={active} bottomInset={bottomInset}
-          onNearEnd={() => { if (!loading && !done) load(page + 1); }} />
+      {showFeed ? (
+        <Feed videoIds={ids} mode="home" active={active && showFeed} bottomInset={bottomInset} homeFeed={feed}
+          onHomeFeed={setFeed}
+          onNearEnd={() => { if (feed === "recommend" && !loading && !done) load(page + 1); }} />
+      ) : feed === "follow" ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg">
+          <Empty icon={<ISearch size={26} />} title="还没有追剧" sub="看过的剧会出现在这里" action="去推荐看看" onAction={() => setFeed("recommend")} />
+        </div>
       ) : !loading && error ? (
         <div className="absolute inset-0 flex items-center justify-center bg-bg">
           <Empty icon={<ISearch size={26} />} title="首页加载失败" sub={error} action="重试" onAction={() => void load(1)} />

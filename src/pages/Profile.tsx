@@ -8,7 +8,7 @@ import { IClock, ILogout, IPlayF, ISettings, IStar, IUser } from "../icons";
 /* 我的：结构固定（资料卡 + 我的收藏 / 观看历史）。
    收藏与观看记录都存在本地，所以未登录也照常展示；未登录时资料卡本身就是登录入口。 */
 export default function Profile({ wide }: { wide: boolean }) {
-  const { user, setLoginOpen, logout, history, favs, clearHistory, push } = useStore();
+  const { user, setLoginOpen, logout, history, favs, likes, clearHistory, push } = useStore();
   const [tab, setTab] = useState<"fav" | "history">("history");
   const [cards, setCards] = useState<Detail[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,7 +43,7 @@ export default function Profile({ wide }: { wide: boolean }) {
 
   const stats: [string | number, string][] = user
     ? [[fmt(user.counts?.like), "点赞"], [fmt(user.counts?.collect), "收藏"], [fmt(user.counts?.following), "关注"]]
-    : [[history.length, "看过"], [favs.length, "收藏"]];
+    : [[history.length, "看过"], [favs.length, "收藏"], [likes.length, "点赞"]];
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">

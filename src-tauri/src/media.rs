@@ -30,6 +30,8 @@ static IMG_CACHE: Lazy<Mutex<HashMap<String, Arc<Vec<u8>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static PL_CACHE: Lazy<Mutex<HashMap<String, Arc<String>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+static SEG_CACHE: Lazy<Mutex<HashMap<String, Arc<Vec<u8>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 const IMG_CACHE_MAX: usize = 240;
 const PL_CACHE_MAX: usize = 60;
@@ -184,16 +186,36 @@ fn rewrite_uri_attr(line: &str, prefix: &str) -> String {
     map_uri_attributes(line, |uri| format!("{prefix}/seg?u={}", enc(uri)))
 }
 
+/// 播放器超时重试时直接复用已经下好的分片，避免同一个 1.6 MB 分片再等一轮 CDN。
+async fn load_segment(url: &str) -> Result<(Option<String>, Arc<Vec<u8>>), String> {
+    if let Some(hit) = SEG_CACHE.lock().unwrap().get(url).cloned() {
+        return Ok((None, hit));
+    }
+    let (ctype, bytes) = fetch_bytes(url).await?;
+    let arc = Arc::new(bytes);
+    cache_put(&SEG_CACHE, url.to_string(), arc.clone(), 8);
+    Ok((ctype, arc))
+}
+
 /// 取 m3u8 并把 key / 分片地址改写到本地协议。
 pub async fn load_playlist(url: &str, prefix: &str) -> Result<Arc<String>, String> {
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
+    crate::logging::trace(&format!("playlist.begin host={host}"));
     if let Some(hit) = PL_CACHE.lock().unwrap().get(url).cloned() {
         return Ok(hit);
     }
-    let (_, bytes) = fetch_bytes(url).await?;
+    let (_, bytes) = match fetch_bytes(url).await {
+        Ok(value) => value,
+        Err(error) => {
+            crate::logging::trace(&format!("playlist.fail host={host} {}", error.chars().take(160).collect::<String>()));
+            return Err(error);
+        }
+    };
     let text = std::str::from_utf8(&bytes).map_err(|_| "播放列表不是 UTF-8 文本")?;
     if !text.trim_start_matches('\u{feff}').starts_with("#EXTM3U") {
         return Err("响应不是 HLS 播放列表".into());
     }
+    crate::logging::trace(&format!("playlist.ok host={host} bytes={}", bytes.len()));
     let arc = Arc::new(rewrite_playlist(url, text, prefix));
     cache_put(&PL_CACHE, url.to_string(), arc.clone(), PL_CACHE_MAX);
     Ok(arc)
@@ -350,8 +372,8 @@ pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> 
             ),
             Err(e) => respond(502, "text/plain", e.into_bytes(), "no-store"),
         },
-        "/seg" => match fetch_bytes(&target).await {
-            Ok((ctype, bytes)) => segment_response(&target, ctype.as_deref(), bytes, origin),
+        "/seg" => match load_segment(&target).await {
+            Ok((ctype, bytes)) => segment_response(&target, ctype.as_deref(), bytes.as_ref().clone(), origin),
             Err(e) => respond(502, "text/plain", e.into_bytes(), "no-store"),
         },
         _ => respond(404, "text/plain", b"not found".to_vec(), "no-store"),
@@ -443,6 +465,7 @@ mod tests {
             .and_then(|v| v.as_str())
             .expect("streams.main")
             .to_string();
+        crate::net::remember_cdn(&url, crate::net::CdnAuth::from_playback(&play));
         println!("play url: {}", &url[..url.len().min(90)]);
         let (_, bytes) = fetch_bytes(&url).await.expect("fetch playlist");
         let text = String::from_utf8_lossy(&bytes);

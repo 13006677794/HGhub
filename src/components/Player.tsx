@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { fmtTime, playlist } from "../api";
+import { fmtTime, isIos, playlist } from "../api";
 import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
 import { usePlaybackActivity } from "../usePlaybackActivity";
 import { useSeekInput } from "../useSeekInput";
@@ -66,7 +66,7 @@ export default function Player({
         interstitialsController: undefined,
         contentSteeringController: undefined,
         enableInterstitialPlayback: false,
-        enableWorker: true,
+        enableWorker: !isIos,
         // Keep the same macOS seek workaround as the shared player.
         preferManagedMediaSource: false,
         autoStartLoad: false,
@@ -85,15 +85,21 @@ export default function Player({
         if (activity.isActive()) hls.startLoad();
         if (autoPlay) activity.play("manifest_autoplay", true);
       });
+      let recoveries = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
+        if (activity.isActive() && recoveries < 2) {
+          recoveries += 1;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls.startLoad(); return; }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+        }
         const detail = `${data.type}/${data.details}/${data.response?.code ?? ""}/${String(data.reason ?? "").slice(0, 80)}`;
         (window as unknown as { __hlsErr?: string }).__hlsErr = detail;
         setErrMsg(detail);
-        if (!activity.isActive()) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-        else { hls.destroy(); hlsRef.current = null; }
+        if (data.type !== Hls.ErrorTypes.NETWORK_ERROR && data.type !== Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.destroy();
+          hlsRef.current = null;
+        }
       });
     } else {
       // Safari / 部分 WebView 原生支持 HLS

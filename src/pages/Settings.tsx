@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { api, APP_VERSION, hostOf, logLine, platform, type UpdateInfo } from "../api";
+import { api, APP_VERSION, hostOf, logLine, type UpdateInfo } from "../api";
 import { useStore } from "../store";
 import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
@@ -9,8 +9,10 @@ import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRe
 /* 独立设置页：线路 / 外观 / 播放 / 本地数据 / 清理缓存 / 网络诊断 / 关于
    入口：Windows 侧栏「设置」、Android「我的」右上角齿轮 */
 export default function Settings({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { theme, setTheme, favs, history, muteOnStartup, setMuteOnStartup, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity, toast } = useStore();
+  const { themePref, setTheme, favs, history, muteOnStartup, setMuteOnStartup, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity, toast } = useStore();
   const [about, setAbout] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [cacheLabel, setCacheLabel] = useState("128 MB");
   const [clearOpen, setClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [lineOpen, setLineOpen] = useState(false);
@@ -41,80 +43,105 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
 
   const Section = ({ title, children }: { title: string; children: ReactNode }) => (
     <>
-      <div className="text-[10.5px] font-semibold text-dim tracking-wide px-1 mt-4 mb-1.5">{title}</div>
-      <div className="rounded-(--r-md) bg-s2 divide-y divide-s3">{children}</div>
+      <div className="text-[13px] text-dim px-4 mt-5 mb-2">{title}</div>
+      <div className="mx-4 rounded-[14px] bg-s1 overflow-hidden">{children}</div>
     </>
   );
+  const recordCount = favs.length + history.length;
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
-      <div className="shrink-0 relative overflow-hidden bg-s1" style={{ paddingTop: "var(--sat, 0px)" }}>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(90% 120% at 100% 0%, var(--p-pc) 0%, transparent 60%)", opacity: 0.32 }} />
-        <div className="relative px-3 pt-2 pb-4">
-          <button onClick={onBack} aria-label="返回" className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
-          <div className="px-2 mt-1 flex items-end justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-9 h-9 rounded-(--r-sm) bg-pc text-on-pc flex items-center justify-center"><ISettings size={20} strokeWidth={1.7} /></span>
-                <span className="text-[24px] font-bold tracking-wide text-on">设置</span>
+      <div className="shrink-0 px-2" style={{ paddingTop: "var(--sat, 0px)" }}>
+        <button onClick={onBack} className="h-11 px-2 flex items-center gap-0.5 text-[17px] text-on pressable">
+          <IBack size={18} />我的
+        </button>
+        <h1 className="px-3 pb-1 text-[34px] font-bold text-on leading-none">设置</h1>
+      </div>
+
+      <div className="flex-1 scroll-y pb-10">
+        <div className={wide ? "max-w-[720px] mx-auto" : ""}>
+          <Section title="外观">
+            <div className="p-3.5 flex flex-col gap-3">
+              <span className="text-[16px] text-on">主题</span>
+              <div role="radiogroup" aria-label="主题" className="flex p-0.5 rounded-[11px] bg-bg">
+                {([["system", "跟随系统"], ["dark", "深色"], ["light", "浅色"]] as const).map(([value, label]) => {
+                  const on = themePref === value;
+                  return (
+                    <button key={value} role="radio" aria-checked={on} onClick={() => setTheme(value)}
+                      className={`flex-1 h-8 rounded-[9px] text-[14px] pressable ${on ? "bg-s3 text-on font-semibold shadow-sm" : "text-mut font-medium"}`}>
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="text-[11px] text-mut mt-1">外观 · 播放 · 本地数据 · 诊断</div>
             </div>
-          </div>
+          </Section>
+
+          <Section title="播放与数据">
+            <div className="h-12 pl-3.5 flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IVolMute size={15} /></span>
+              <div className="flex-1 h-12 flex items-center gap-2 pr-3.5">
+                <span className="flex-1 text-[16px] text-on">启动时静音</span>
+                <Toggle on={muteOnStartup} onChange={setMuteOnStartup} label="启动时静音" />
+              </div>
+            </div>
+            <button onClick={() => setLineOpen(true)} className="w-full h-12 pl-3.5 flex items-center gap-3 text-left pressable">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IBoltF size={15} /></span>
+              <span className="flex-1 h-12 flex items-center gap-2 pr-3.5 border-t border-s3">
+                <span className="flex-1 text-[16px] text-on">线路</span>
+                <span className="text-[15px] text-dim truncate max-w-[42%]">{lineBase ? hostOf(lineBase) : "固定线路 1"}</span>
+                <IChevR size={15} className="text-dim" />
+              </span>
+            </button>
+            <div className="h-12 pl-3.5 flex items-center gap-3">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IHeart size={15} /></span>
+              <div className="flex-1 h-12 flex items-center gap-2 pr-3.5 border-t border-s3">
+                <span className="flex-1 text-[16px] text-on">收藏与观看记录</span>
+                <span className="text-[15px] text-dim">{recordCount} 条</span>
+              </div>
+            </div>
+            <button onClick={() => setClearOpen(true)} className="w-full h-12 pl-3.5 flex items-center gap-3 text-left pressable">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IBroom size={15} /></span>
+              <span className="flex-1 h-12 flex items-center gap-2 pr-3.5 border-t border-s3">
+                <span className="flex-1 text-[16px] text-on">清理缓存</span>
+                <span className="text-[15px] text-dim">{cacheLabel}</span>
+                <IChevR size={15} className="text-dim" />
+              </span>
+            </button>
+          </Section>
+
+          <Section title="关于">
+            <button onClick={checkUpdate} disabled={checking} className="w-full h-12 pl-3.5 flex items-center gap-3 text-left pressable disabled:opacity-60">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IRefresh size={15} /></span>
+              <span className="flex-1 h-12 flex items-center gap-2 pr-3.5">
+                <span className="flex-1 text-[16px] text-on">{checking ? "检查中…" : "检查更新"}</span>
+                <span className="text-[15px] text-dim">{APP_VERSION}</span>
+                <IChevR size={15} className="text-dim" />
+              </span>
+            </button>
+            <button onClick={() => setAdvanced(true)} className="w-full h-12 pl-3.5 flex items-center gap-3 text-left pressable">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><ILockF size={14} /></span>
+              <span className="flex-1 h-12 flex items-center gap-2 pr-3.5 border-t border-s3">
+                <span className="flex-1 text-[16px] text-on">高级与诊断</span>
+                <IChevR size={15} className="text-dim" />
+              </span>
+            </button>
+            <button onClick={() => setAbout(true)} className="w-full h-12 pl-3.5 flex items-center gap-3 text-left pressable">
+              <span className="w-7 h-7 rounded-lg bg-s3 flex items-center justify-center text-mut"><IInfo size={15} /></span>
+              <span className="flex-1 h-12 flex items-center gap-2 pr-3.5 border-t border-s3">
+                <span className="flex-1 text-[16px] text-on">关于 HGhub</span>
+                <IChevR size={15} className="text-dim" />
+              </span>
+            </button>
+          </Section>
+          <div className="text-center text-[12px] text-dim mt-8">HGhub {APP_VERSION} · 仅限非商业使用</div>
         </div>
       </div>
 
-      <div className="flex-1 scroll-y px-4 pt-1 pb-10">
-        <div className={wide ? "max-w-[720px] mx-auto" : ""}>
-          <Section title="外观">
-            <div className="flex items-center gap-3 px-3.5 py-3">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary">{theme === "dark" ? <IMoon size={16} /> : <ISun size={16} />}</span>
-              <div className="flex-1">
-                <div className="text-[12.5px] text-on">深色外观</div>
-                <div className="text-[10.5px] text-mut">跟随设计稿的 Fluent 深色</div>
-              </div>
-              <Toggle on={theme === "dark"} onChange={(on) => setTheme(on ? "dark" : "light")} label="深色外观" />
-            </div>
-          </Section>
-
-          <Section title="播放">
-            <div className="flex items-center gap-3 px-3.5 py-3">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IVolMute size={16} /></span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] text-on">启动时静音</div>
-                <div className="text-[10.5px] text-mut">默认开启，每次启动均静音；关闭后记住上次静音状态。下次启动生效。</div>
-              </div>
-              <Toggle on={muteOnStartup} onChange={setMuteOnStartup} label="启动时静音" />
-            </div>
-          </Section>
-
-          <Section title="本地数据">
-            <div className="flex items-center gap-3 px-3.5 py-3">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IHeart size={16} /></span>
-              <div className="flex-1">
-                <div className="text-[12.5px] text-on">本地喜欢</div>
-                <div className="text-[10.5px] text-mut">{favs.length} 部收藏 · {history.length} 条观看记录</div>
-              </div>
-            </div>
-            <button onClick={() => setClearOpen(true)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IBroom size={16} /></span>
-              <div className="flex-1">
-                <div className="text-[12.5px] text-on">清理缓存</div>
-                <div className="text-[10.5px] text-mut">封面 / 播放缓存与本地记录</div>
-              </div>
-              <IChevR size={15} className="text-mut" />
-            </button>
-          </Section>
-
-          <Section title="网络">
-            <button onClick={() => setLineOpen(true)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IBoltF size={16} /></span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] text-on">线路</div>
-                <div className="text-[10.5px] text-mut truncate">{lineBase ? hostOf(lineBase) : "固定线路 1（默认）"}</div>
-              </div>
-              <IChevR size={15} className="text-mut" />
-            </button>
+      <Modal open={advanced} onClose={() => setAdvanced(false)} width={420}>
+        <div className="p-4">
+          <div className="text-[16px] font-bold text-on mb-3">高级与诊断</div>
+          <div className="rounded-[14px] bg-s2 overflow-hidden">
             <div className="flex items-center gap-3 px-3.5 py-3">
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><ILockF size={15} /></span>
               <div className="flex-1 min-w-0">
@@ -154,10 +181,7 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               </div>
               <IChevR size={15} className="text-mut" />
             </button>
-          </Section>
-
-          <Section title="播放诊断">
-            <div className="flex items-center gap-3 px-3.5 py-3">
+            <div className="flex items-center gap-3 px-3.5 py-3 border-t border-s3">
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IInfo size={16} /></span>
               <div className="flex-1 min-w-0">
                 <div className="text-[12.5px] text-on">播放诊断日志</div>
@@ -180,30 +204,10 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               </div>
               <IChevR size={15} className="text-mut" />
             </button>
-          </Section>
-
-          <Section title="其他">
-            <button onClick={checkUpdate} disabled={checking} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable disabled:opacity-60">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IRefresh size={16} /></span>
-              <div className="flex-1">
-                <div className="text-[12.5px] text-on">检查更新</div>
-                <div className="text-[10.5px] text-mut">{checking ? "检查中…" : `当前 v${APP_VERSION} · 对比 GitHub Release`}</div>
-              </div>
-              <IChevR size={15} className="text-mut" />
-            </button>
-            <button onClick={() => setAbout(true)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
-              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IInfo size={16} /></span>
-              <div className="flex-1">
-                <div className="text-[12.5px] text-on">关于 HGhub</div>
-                <div className="text-[10.5px] text-mut">版本 {APP_VERSION} · 仅限非商业使用</div>
-              </div>
-              <IChevR size={15} className="text-mut" />
-            </button>
-          </Section>
-
-          <div className="text-center text-[10px] text-dim mt-5">HGhub {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : "Windows"} 客户端</div>
+          </div>
+          <button onClick={() => setAdvanced(false)} className="mt-4 w-full h-10 rounded-(--r-ctl) bg-s3 text-[14px] text-on pressable">关闭</button>
         </div>
-      </div>
+      </Modal>
 
       <LinePicker open={lineOpen} onClose={() => { setLineOpen(false); readLine(); }} />
 
@@ -266,7 +270,7 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
             <button onClick={() => setClearOpen(false)} className="flex-1 h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on/80 pressable">取消</button>
             <button disabled={clearing} onClick={async () => {
               setClearing(true);
-              try { await api.clearCache(); } catch { /* 忽略 */ }
+              try { await api.clearCache(); setCacheLabel("0 MB"); } catch { /* 忽略 */ }
               setClearing(false);
               setClearOpen(false);
               toast("缓存已清理", "ok");

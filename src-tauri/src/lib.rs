@@ -4,6 +4,8 @@ mod logging;
 #[cfg(target_os = "macos")]
 mod macos_titlebar;
 mod media;
+#[cfg(target_os = "ios")]
+mod media_http;
 mod net;
 mod network_policy;
 mod playback_log;
@@ -57,10 +59,13 @@ pub fn run() {
                 let _ = std::fs::create_dir_all(&dir);
                 // 上次选择的线路（设置 → 线路）在启动时恢复
                 net::bind_base(&dir);
+                logging::bind_debug(&dir);
                 playback_log::bind(&dir);
                 let state: tauri::State<Api> = app.state();
                 state.session.bind(dir);
             }
+            #[cfg(target_os = "ios")]
+            media_http::start();
             // macOS 主窗口在此创建：先按系统红绿灯尺寸算出居中位置（见 macos_titlebar.rs）
             #[cfg(target_os = "macos")]
             macos_titlebar::create_main_window(app)?;
@@ -145,6 +150,7 @@ pub fn run() {
             api::api_logout,
             api::api_me,
             api::api_feed,
+            api::media_origin,
             api::api_category,
             api::api_rank,
             api::api_search,

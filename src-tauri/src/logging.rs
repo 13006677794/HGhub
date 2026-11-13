@@ -6,6 +6,19 @@ use std::sync::Mutex;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 
 static DEBUG_WRITER: Mutex<()> = Mutex::new(());
+static DEBUG_DIR: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
+
+pub(crate) fn bind_debug(dir: &Path) {
+    if let Ok(mut slot) = DEBUG_DIR.lock() {
+        *slot = Some(dir.to_path_buf());
+    }
+}
+
+/// 播放链路排查用。不写完整地址，只记调用方给出的短描述。
+pub(crate) fn trace(message: &str) {
+    let Some(dir) = DEBUG_DIR.lock().ok().and_then(|g| g.clone()) else { return };
+    let _ = append_debug(&dir, message);
+}
 
 fn format_utc(at: OffsetDateTime) -> Result<String, String> {
     at.to_offset(UtcOffset::UTC)

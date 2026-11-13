@@ -5,6 +5,7 @@ import type { User } from "./types";
 
 export type Platform = "android" | "ios" | "windows" | "macos";
 export type Theme = "dark" | "light";
+export type ThemePref = "system" | Theme;
 export type Tab = "home" | "category" | "chat" | "search" | "profile";
 
 /** 播放页上下文：ids 是来源列表，index 是当前条目。 */
@@ -89,12 +90,20 @@ function loadPersist(): Persist {
   }
 }
 
-function readTheme(): Theme {
+function systemTheme(): Theme {
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function readThemePref(): ThemePref {
   try {
-    return localStorage.getItem("hghub_theme") === "light" ? "light" : "dark";
-  } catch {
-    return "dark";
-  }
+    const saved = localStorage.getItem("hghub_theme");
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  } catch { /* 保持深色 */ }
+  return "dark";
+}
+
+function resolveTheme(pref: ThemePref): Theme {
+  return pref === "system" ? systemTheme() : pref;
 }
 
 function applyTheme(theme: Theme) {
@@ -104,7 +113,9 @@ function applyTheme(theme: Theme) {
 
 type Store = {
   platform: Platform;
-  theme: Theme; setTheme: (t: Theme) => void;
+  theme: Theme;
+  themePref: ThemePref;
+  setTheme: (t: ThemePref) => void;
   tab: Tab; setTab: (t: Tab) => void;
   stack: Page[]; push: (p: PageInput) => void; pop: () => void;
   user: User | null; setUser: (u: User | null) => void;
@@ -134,7 +145,8 @@ let seq = 0;
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [p, setP] = useState<Persist>(loadPersist);
-  const [theme, setThemeState] = useState<Theme>(readTheme);
+  const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
+  const [theme, setThemeState] = useState<Theme>(() => resolveTheme(readThemePref()));
   const [tab, setTabRaw] = useState<Tab>("home");
   const [stack, setStack] = useState<Page[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -149,9 +161,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toastSeq = useRef(0);
 
   useEffect(() => {
-    applyTheme(theme);
-    try { localStorage.setItem("hghub_theme", theme); } catch { /* ignore */ }
-  }, [theme]);
+    const next = resolveTheme(themePref);
+    setThemeState(next);
+    applyTheme(next);
+    try { localStorage.setItem("hghub_theme", themePref); } catch { /* ignore */ }
+    if (themePref !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => {
+      const resolved = systemTheme();
+      setThemeState(resolved);
+      applyTheme(resolved);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [themePref]);
 
   useEffect(() => {
     try { localStorage.setItem(LS, JSON.stringify(p)); } catch { /* ignore */ }
@@ -269,7 +292,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<Store>(() => ({
     platform: envPlatform,
-    theme, setTheme: setThemeState,
+    theme, themePref, setTheme: setThemePref,
     tab, setTab, stack, push, pop,
     user, setUser, loginOpen, setLoginOpen, logout,
     likes: p.likes, favs: p.favs, history: p.history, follows: p.follows,
@@ -281,7 +304,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast,
-  }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
+  }), [theme, themePref, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     setMuted, setMuteOnStartup, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, theater, setTheater, fs, setFs]);

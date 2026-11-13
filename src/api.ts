@@ -23,6 +23,20 @@ export const isMobile = isAndroid || isIos;
  *  macOS / iOS / Linux → `<scheme>://localhost`
  *  Rust 侧 `src-tauri/src/lib.rs` 里改写 m3u8 用的 scheme 必须与此一致。 */
 export const LOCAL = isMacos || isIos ? "hg://localhost" : "http://hg.localhost";
+/** iOS 播放清单改走本机 HTTP。封面仍用上面的自定义协议。 */
+let mediaBase = LOCAL;
+let mediaReady: Promise<void> = Promise.resolve();
+if (isIos) {
+  mediaReady = (async () => {
+    for (let i = 0; i < 20; i++) {
+      const origin = await invoke<string | null>("media_origin").catch(() => null);
+      if (origin) { mediaBase = origin; return; }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  })();
+}
+export const playlist = (url: string) => `${mediaBase}/hls?u=${encodeURIComponent(url)}`;
+export const whenMediaReady = () => mediaReady;
 
 /** src 是否已是本地协议地址（避免在详情页把代理地址再包一层） */
 export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`);
@@ -31,8 +45,7 @@ export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`);
 export const cover = (url?: string, _w = 480) =>
   url ? `${LOCAL}/img?u=${encodeURIComponent(url)}` : "";
 
-/** 播放列表：经本地协议改写分片地址，规避 CORS 与防盗链。 */
-export const playlist = (url: string) => `${LOCAL}/hls?u=${encodeURIComponent(url)}`;
+
 
 /* ── 调用封装 ───────────────────────────────────────────── */
 
